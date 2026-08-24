@@ -24,13 +24,13 @@ Berisi lingkungan kerja basis data, hasil latihan, dan artefak pembelajaran sela
 
 ## Anggota Tim
 
-| No | NIM | Nama | Akun GitHub | Bagian yang dikerjakan |
-|----|-----|------|-------------|------------------------|
-| 1 | [NIM] | [Nama Lengkap] | [@username] | `docker-compose.yml`, `.gitignore` |
-| 2 | [NIM] | [Nama Lengkap] | [@username] | `README.md` |
-| 3 | [NIM] | [Nama Lengkap] | [@username] | `latihan/p01/verifikasi.sql` |
-| 4 | [NIM] | [Nama Lengkap] | [@username] | `latihan/p01/perintah.md` |
-| 5 | [NIM] | [Nama Lengkap] | [@username] | `latihan/p01/laporan.md`, `bukti/` |
+| No|	 NIM 	| 	      Nama 		| Akun GitHub 	| Bagian yang dikerjakan |
+|---|-----------|-------------------------------|-------------	|------------------------|
+| 1 | 251402079 | Viter Moldy Kesuma 		| vitermoldy 	| `docker-compose.yml`, `.gitignore`, `README.md` |
+| 2 | 251402067 | Siti Naifah Batubara 		| naifah13 	| `/bukti` |
+| 3 | 251402056 | Rizky Cristian Fero Sihombing | RizkySihombing| `latihan/p01/perintah.md` |
+| 4 | 251402050 | Nadine Tantiara Hutagaol 	| nadinehutagaol| `latihan/p01/laporan.md` |
+| 5 | 251402038 | Gideon Finsus Siburian 	| DeezG-web 	| `latihan/p01/verifikasi.sql` |
 
 ---
 

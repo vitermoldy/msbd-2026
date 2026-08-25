@@ -216,7 +216,10 @@ git push -u origin main
 Output `git log --oneline`:
 
 ```
-
+7b9c1ef (HEAD -> main) docs: menambahkan perintah.md latihan p01
+660ea71 (origin/main, origin/HEAD) Verif Pagila
+b6a5102 docs: melengkapi data anggota tim di README
+bb553be chore: menyiapkan lingkungan dan dokumentasi MSBD
 ```
 
-URL repositori tim: `https://github.com/vitermoldy/msbd-2026/tree/main/latihan/p01`
+URL repositori tim: `https://github.com/vitermoldy/msbd-2026`

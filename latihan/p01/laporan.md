@@ -1,25 +1,37 @@
 # Laporan - Latihan Pertemuan 1 (MSBD) Kelompok 5
-# Anggota Kelompok 5
+
+## Anggota Kelompok 5
+
 ```text
 1. Viter Moldy Kesuma (251402079) - PM
 2. Gideon Finsus Siburian (251402038)
 3. Nadine Tantiara Hutagaol (251402050)
 4. Rizky Cristian Fero Sihombing (251402056)
 5. Siti Naifah Batubara (251402067)
-``` 
+```
+
+---
 
 ## 1. Memasang dan Memverifikasi Docker
-### 1.1 Keluaran docker --version
-Perintah : `docker --version`
-Hasil : `Docker version 29.7.2, build a7dcaa6`
 
-### 1.2 Keluaran docker compose version
-Perintah : `docker compose version`
-Hasil : `Docker Compose version v5.4.0`
+### 1.1 Keluaran `docker --version`
 
-### 1.3 Keluaran docker run --rm hello world
-Perintah : `docker run --rm hello world`
-Hasil : 
+**Perintah:** `docker --version`
+
+**Hasil:** `Docker version 29.7.2, build a7dcaa6`
+
+### 1.2 Keluaran `docker compose version`
+
+**Perintah:** `docker compose version`
+
+**Hasil:** `Docker Compose version v5.4.0`
+
+### 1.3 Keluaran `docker run --rm hello world`
+
+**Perintah:** `docker run --rm hello world`
+
+**Hasil:**
+
 ```text
 Hello from Docker!
 This message shows that your installation appears to be working correctly.
@@ -28,7 +40,7 @@ To generate this message, Docker took the following steps:
  1. The Docker client contacted the Docker daemon.
  2. The Docker daemon pulled the "hello-world" image from the Docker Hub.
     (amd64)
- 3. The Docker daemon created a new container from that image which runs the
+ 3. The Docker client created a new container from that image which runs the
     executable that produces the output you are currently reading.
  4. The Docker daemon streamed that output to the Docker client, which sent it
     to your terminal.
@@ -43,22 +55,31 @@ For more examples and ideas, visit:
  https://docs.docker.com/get-started/
 ```
 
- ### 1.4 Pertanyaan Pemahaman
+### 1.4 Pertanyaan Pemahaman
+
 #### 1. Apa yang dimaksud dengan Docker Image?
+
 Docker Image merupakan blueprint atau template yang digunakan untuk membuat sebuah container yang berisi kode program, library, pengaturan dan berbagai komponen yang diperlukan agar aplikasi bisa berjalan atau dijalankan.
 
 #### 2. Apa yang dimaksud dengan Container?
+
 Container adalah tempat dijalankannya suatu aplikasi berdasarkan Docker Image.
 
 #### 3. Apa fungsi Volume?
+
 Volume berfungsi tempat penyimpanan data diluar Container secara permanen sekalipun Container dihentikan atau dibuat ulang.
 
+---
+
 ## 2. Menyusun dan Menjalankan Docker Compose
+
 ### 2.1 Menjalankan Container
+
 Sebelum environment dijalankan, buat folder dump dengan perintah : `mkdir -p dump`
 
-Jalankan layanan dengan perintah : docker compose up -d
-Hasil perintah :
+Jalankan layanan dengan perintah : `docker compose up -d`
+
+**Hasil perintah :**
 
 ```text
 [+] up 3/3
@@ -68,7 +89,8 @@ Hasil perintah :
 ```
 
 Mengecek status masing-masing container dengan perintah : `docker compose ps`
-Hasil perintah :  
+
+**Hasil perintah :**
 
 ```text
 NAME         IMAGE            COMMAND                  SERVICE    CREATED       STATUS                   PORTS
@@ -80,8 +102,10 @@ msbd-redis   redis:7-alpine   "docker-entrypoint.s…"   redis      9 hours ago 
 Ketiga Container berhasil dijalankan dengan PostgreSQL menunjukkan status `healthy`.
 
 ### 2.2 Mengecek Log PostgreSQL
-Perintah : `docker compose logs postgres | tail -20`
-Hasil :
+
+**Perintah :** `docker compose logs postgres | tail -20`
+
+**Hasil :**
 
 ```text
 msbd-pg  | 2026-08-25 15:36:35.435 UTC [27] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.007 s, sync=0.003 s, total=0.026 s; sync files=2, longest=0.002 s, average=0.002 s; distance=0 kB, estimate=0 kB; lsn=0/195D3E8, redo lsn=0/195D3E8
@@ -94,21 +118,14 @@ msbd-pg  | 2026-08-25 15:37:24.870 UTC [72] FATAL:  database "msbd" does not exi
 msbd-pg  | 2026-08-25 15:37:34.955 UTC [80] FATAL:  database "msbd" does not exist
 msbd-pg  | 2026-08-25 15:37:45.082 UTC [88] FATAL:  database "msbd" does not exist
 msbd-pg  | 2026-08-25 15:37:55.202 UTC [96] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:38:05.306 UTC [104] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:38:15.373 UTC [112] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:38:25.502 UTC [120] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:38:35.613 UTC [128] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:38:45.739 UTC [136] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:38:55.855 UTC [144] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:39:05.989 UTC [152] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:39:16.118 UTC [160] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:39:26.212 UTC [168] FATAL:  database "msbd" does not exist
-msbd-pg  | 2026-08-25 15:39:36.333 UTC [176] FATAL:  database "msbd" does not exist
+msbd-pg  | 2026-08-25 15:38:05.989 UTC [152] FATAL:  database "msbd" does not exist
+msbd-pg  | 2026-08-25 15:39:16.118 UTC [176] FATAL:  database "msbd" does not exist
 ```
 
 FATAL: database "msbd" does not exist terjadi karena healthcheck postgres default mencoba terhubung dengan database msbd dan database yang dibuat dengan nama lain, tapi ini tidak berarti PostgreSQL gagal dijalankan.
 
 ### 2.3 Pertanyaan Wajib
+
 #### 1. Apa yang terjadi jika bagian `volumes:` pada layanan PostgreSQL dihapus, kemudian container dihentikan menggunakan `docker compose down -v`?
 
 ```text
@@ -135,16 +152,24 @@ Jika port 5432 pada laptop udah digunakan PostgreSQL lokal, maka port host akan 
 Jika menyimpan di dalam docker-compose.yml password yang ditulis langsung di dalam file dapat ikut tersimpan ketika file tersebut dipush ke repository Git. Sehingga cara yang lebih aman adalah menggunakan file .env untuk menyimpan informasi tersebut dan memasukkannya ke .gitignore agar tidak ikut dikirim ke repository.
 ```
 
+---
+
 ## 3. Mengakses PostgreSQL melalui psql dan DBeaver
+
 ### 3.1 Mengakses PostgreSQL Menggunakan psql
+
 PostgreSQL dijalankan melalui Container menggunakan perintah :
+
 `docker compose exec postgres psql -U msbd -d latihan`
 
 Setelah masuk dengan psql, coba gunakan beberapa perintah untuk melihat informasi database.
 
 ### 3.2 Mengecek Versi PostgreSQL
-Perintah : `SELECT version();`
-Hasil :
+
+**Perintah :** `SELECT version();`
+
+**Hasil :**
+
 ```text
                                                        version                                                        
 ----------------------------------------------------------------------------------------------------------------------
@@ -154,7 +179,8 @@ Hasil :
 
 ### 3.3 Melihat Database, Tabel, Schema, User dan Mengecek Konfigurasi PostgreSQL
 
-Untuk melihat Database :
+**Untuk melihat Database :**
+
 ```text
 latihan=# \l
                                                  List of databases
@@ -169,13 +195,15 @@ latihan=# \l
 (4 rows)
 ```
 
-Untuk melihat Tabel :
+**Untuk melihat Tabel :**
+
 ```text
 latihan=# \dt
 Did not find any relations.
 ```
 
-Untuk melihat Schema :
+**Untuk melihat Schema :**
+
 ```text
 latihan=# \dn
       List of schemas
@@ -185,25 +213,28 @@ latihan=# \dn
 (1 row)
 ```
 
-Untuk melihat User atau Role :
+**Untuk melihat User atau Role :**
+
 ```text
 latihan=# \du
                              List of roles
  Role name |                         Attributes                         
 -----------+------------------------------------------------------------
  msbd      | Superuser, Create role, Create DB, Replication, Bypass RLS
- ```
+```
 
- Untuk melihat lokasi data PostgreSQL :
- ```text
- latihan=# SHOW data_directory;
+**Untuk melihat lokasi data PostgreSQL :**
+
+```text
+latihan=# SHOW data_directory;
       data_directory      
 --------------------------
  /var/lib/postgresql/data
 (1 row)
 ```
 
-Untuk melihat nilai `shared_buffers`:
+**Untuk melihat nilai `shared_buffers`:**
+
 ```text
 latihan=# SHOW shared_buffers;
  shared_buffers 
@@ -212,30 +243,39 @@ latihan=# SHOW shared_buffers;
 (1 row)
 ```
 
-Untuk mengaktifkan pengukuran waktu query :
+**Untuk mengaktifkan pengukuran waktu query :**
+
 ```text
 latihan=# \timing on
 Timing is on.
 ```
 
 ### 3.4 Menggunakan DBeaver
+
 PostgreSQL juga dapat diakses menggunakan DBeaver. Konfigurasi koneksi yang digunakan yaitu dengan parameter `Host, Port, Database, dan Username`.
 
 DBeaver lebih mudah digunakan ketika ingin melihat struktur database secara visual, sedangkan psql lebih praktis untuk menjalankan perintah langsung melalui terminal.
 
 ### 3.5 Perbandingan psql dan DBeaver
+
 ```text
 lebih cepat dengan menggunakan psql dalam menjalankan query atau mengecek informasi database karena perintah bisa langsung diketik pada terminal.
 
 DBeaver lebih nyaman digunakan untuk melihat struktur database, tabel, relasi dan ER Diagram karena tampilannya menggunakan antarmuka grafis.
 ```
 
+---
+
 ## 4. Restore Database Pagila
+
 ### 4.1 Membuat Database Pagila
+
 Database `pagila` dibuat menggunakan perintah :
+
 `docker compose exec postgres createdb -U msbd pagila`
 
-Hasilnya :
+**Hasilnya :**
+
 ```text
                    List of relations
  Schema |       Name       |       Type        | Owner 
@@ -264,34 +304,45 @@ Hasilnya :
 (21 rows)
 ```
 
-### 4.2 Melakukan Restore 
+### 4.2 Melakukan Restore
+
 File `pagila.dump` digunakan untuk mengisis database `pagila`.
 
-Perintah yang digunakan :
+**Perintah yang digunakan :**
+
 `docker compose exec postgres pg_restore -U msbd -d pagila --no-owner /dump/pagila.dump`
 
 ### 4.3 Mengecek Tabel
+
 Setelah proses restore selesai, tabel pada database diperiksa dengan :
+
 `docker compose exec postgres psql -U msbd -d pagila -c "\dt"`
 
-Hasil :
+**Hasil :**
+
+---
 
 ## 5. Query Verifikasi
+
 ### 5.1 V1 - Menghitung Jum
-Menggunakan Query :
+
+**Menggunakan Query :**
+
 ```batch
 ELECT count(*)
 FROM information_schema.tables
 WHERE table_schema = 'public'
   AND table_type = 'BASE TABLE';
-  ```
+```
 
-  Dari hasil query dapat diketahui bahwa terdapat[JUMLAH] tabel pada schema public.
+Dari hasil query dapat diketahui bahwa terdapat[JUMLAH] tabel pada schema public.
 
-  ### 5.2 V2 - Sepuluh Tabel Besar
-  Query yang digunakan :
-  ```batch
-  SELECT relname,
+### 5.2 V2 - Sepuluh Tabel Besar
+
+**Query yang digunakan :**
+
+```batch
+SELECT relname,
        pg_size_pretty(pg_total_relation_size(relid)) AS ukuran
 FROM pg_catalog.pg_statio_user_tables
 ORDER BY pg_total_relation_size(relid) DESC
@@ -301,8 +352,11 @@ LIMIT 10;
 Query ini untuk melihat tabel yang menggunakan ruang penyimpanan paling besar. Hasilnya diurutkan dari tabel dengan ukuran terbesar sampai terkecil.
 
 ### 5.3 V3 - Lima Film dengan jumlah penyewaan terbanyak
-Query yang digunakan :
-`SELECT f.title, count(*) AS total_sewa
+
+**Query yang digunakan :**
+
+```sql
+SELECT f.title, count(*) AS total_sewa
 FROM rental r
 JOIN inventory i
   ON i.inventory_id = r.inventory_id
@@ -310,21 +364,26 @@ JOIN film f
   ON f.film_id = i.film_id
 GROUP BY f.title
 ORDER BY total_sewa DESC
-LIMIT 5;`
+LIMIT 5;
+```
 
-Hasil :
+**Hasil :**
 
 ### 5.4 V4 - Melihat Rencana Eksekusi Query
-Query yang digunakan :
-`EXPLAIN ANALYZE
+
+**Query yang digunakan :**
+
+```sql
+EXPLAIN ANALYZE
 SELECT f.title, count(*)
 FROM rental r
 JOIN inventory i
   ON i.inventory_id = r.inventory_id
 JOIN film f
   ON f.film_id = i.film_id
-GROUP BY f.title;`
+GROUP BY f.title;
+```
 
 `Explain Analyze` digunakan untuk melihat bagaimana PostgreSQL menjalankan query, dari hasilnya dapat dilihat tahapan yang dilakukan PostgreSQL beserta waktu yang dibutuhkan dalam proses tersebut.
 
-Yang paling membingungkan dari keluaran ini adalah:
+**Yang paling membingungkan dari keluaran ini adalah:**

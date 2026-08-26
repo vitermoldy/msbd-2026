@@ -442,7 +442,7 @@ Execution Time: 36.380 ms
 | **Gideon Finsus Siburian** | `chore:` melakukan verifikasi database Pagila |
 | **Nadine Tantiara Hutagaol** | `docs:` memperbarui laporan dan melengkapi `laporan.md` <br> `feat:` menambahkan eksperimen index tantangan tambahan |
 | **Rizky Cristian Fero Sihombing** | `docs:` menambahkan dan memperbarui `perintah.md` pada latihan P01 |
-| **Siti Naifah Batubara** | `chore:` menyiapkan lingkungan MSBD <br> docs:` melengkapi bukti screenshot |
+| **Siti Naifah Batubara** | `chore:` menyiapkan lingkungan MSBD <br> `docs:` melengkapi bukti screenshot |
 
 ## Tantangan Tambahan
 

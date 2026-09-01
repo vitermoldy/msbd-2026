@@ -7,12 +7,12 @@ services:
       POSTGRES_PASSWORD: msbd2026
       POSTGRES_DB: latihan
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./dump:/dump
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U msbd"]
+      test: ['CMD-SHELL', 'pg_isready -U msbd']
       interval: 10s
       retries: 5
 
@@ -23,7 +23,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: msbd
       MONGO_INITDB_ROOT_PASSWORD: msbd2026
     ports:
-      - "27017:27017"
+      - '27017:27017'
     volumes:
       - mongodata:/data/db
 
@@ -31,7 +31,19 @@ services:
     image: redis:7-alpine
     container_name: msbd-redis
     ports:
-      - "6379:6379"
+      - '6379:6379'
+
+  flyway:
+    image: flyway/flyway:11
+    depends_on:
+      - postgres
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/proyek_dev
+      FLYWAY_USER: msbd
+      FLYWAY_PASSWORD: msbd2026
+      FLYWAY_CONNECT_RETRIES: '10'
+    volumes:
+      - ./latihan/p02/migrations:/flyway/sql
 
 volumes:
   pgdata:

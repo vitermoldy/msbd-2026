@@ -1,0 +1,2 @@
+ALTER TABLE peminjaman
+ALTER COLUMN petugas SET NOT NULL;

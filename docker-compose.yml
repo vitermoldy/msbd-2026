@@ -38,7 +38,7 @@ services:
     depends_on:
       - postgres
     environment:
-      FLYWAY_URL: jdbc:postgresql://postgres:5432/proyek_dev
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/latihan
       FLYWAY_USER: msbd
       FLYWAY_PASSWORD: msbd2026
       FLYWAY_CONNECT_RETRIES: '10'

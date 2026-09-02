@@ -1,2 +1,2 @@
-ALTER TABLE peminjaman
-ALTER COLUMN petugas SET NOT NULL;
+ALTER TABLE pelapor
+ALTER COLUMN nomor_telepon SET NOT NULL;

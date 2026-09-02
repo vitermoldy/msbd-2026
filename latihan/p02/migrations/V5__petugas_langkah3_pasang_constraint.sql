@@ -1,2 +1,2 @@
-ALTER TABLE pelapor
-ALTER COLUMN nomor_telepon SET NOT NULL;
+ALTER TABLE tiket
+ALTER COLUMN petugas_penerima SET NOT NULL;

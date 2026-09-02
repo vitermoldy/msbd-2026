@@ -1,3 +1,3 @@
-UPDATE pelapor
-SET nomor_telepon = 'tidak tersedia'
-WHERE nomor_telepon IS NULL;
+UPDATE tiket
+   SET petugas_penerima = 'tidak tercatat'
+ WHERE petugas_penerima IS NULL;

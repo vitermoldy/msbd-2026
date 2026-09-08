@@ -81,31 +81,25 @@ INSERT INTO pelapor (
     nama,
     email,
     id_peran,
-    status,
-    nomor_telepon
+    status
 )
 SELECT
     data.nomor_induk,
     data.nama,
     data.email,
     p.id_peran,
-    data.status,
-    data.nomor_telepon
+    data.status
 FROM (
     VALUES
-        ('MHS-001', 'Mahasiswa Helpdesk', 'mahasiswa@kampus.ac.id',
-         'MHS', 'aktif', '081234567890'),
-        ('DSN-001', 'Dosen Helpdesk', 'dosen@kampus.ac.id',
-         'DSN', 'aktif', '081298765432'),
-        ('STF-001', 'Staf Helpdesk', 'staf@kampus.ac.id',
-         'STF', 'aktif', '082112345678')
+        ('MHS-001', 'Mahasiswa Helpdesk', 'mahasiswa@kampus.ac.id', 'MHS', 'aktif'),
+        ('DSN-001', 'Dosen Helpdesk', 'dosen@kampus.ac.id', 'DSN', 'aktif'),
+        ('STF-001', 'Staf Helpdesk', 'staf@kampus.ac.id', 'STF', 'aktif')
 ) AS data(
     nomor_induk,
     nama,
     email,
     kode_peran,
-    status,
-    nomor_telepon
+    status
 )
 JOIN peran p
     ON p.kode = data.kode_peran
@@ -113,8 +107,7 @@ ON CONFLICT (nomor_induk) DO UPDATE SET
     nama = EXCLUDED.nama,
     email = EXCLUDED.email,
     id_peran = EXCLUDED.id_peran,
-    status = EXCLUDED.status,
-    nomor_telepon = EXCLUDED.nomor_telepon;
+    status = EXCLUDED.status;
 
 
 -- tiket
@@ -128,7 +121,8 @@ INSERT INTO tiket (
     prioritas,
     status,
     dilaporkan_pada,
-    jatuh_tempo
+    jatuh_tempo,
+    petugas_penerima
 )
 SELECT
     data.nomor_tiket,
@@ -140,7 +134,8 @@ SELECT
     data.prioritas,
     data.status,
     data.dilaporkan_pada,
-    data.jatuh_tempo
+    data.jatuh_tempo,
+    data.petugas_penerima
 FROM (
     VALUES
         (
@@ -153,7 +148,8 @@ FROM (
             'tinggi',
             'baru',
             TIMESTAMP '2026-08-25 09:00:00',
-            TIMESTAMP '2026-08-26 09:00:00'
+            TIMESTAMP '2026-08-26 09:00:00',
+            'Staf Helpdesk'
         ),
         (
             'TKT-002',
@@ -165,7 +161,8 @@ FROM (
             'biasa',
             'diproses',
             TIMESTAMP '2026-08-25 10:00:00',
-            TIMESTAMP '2026-08-25 22:00:00'
+            TIMESTAMP '2026-08-25 22:00:00',
+            'Staf Helpdesk'
         ),
         (
             'TKT-003',
@@ -177,7 +174,8 @@ FROM (
             'biasa',
             'selesai',
             TIMESTAMP '2026-08-24 08:00:00',
-            TIMESTAMP '2026-08-26 08:00:00'
+            TIMESTAMP '2026-08-26 08:00:00',
+            'Staf Helpdesk'
         )
 ) AS data(
     nomor_tiket,
@@ -189,7 +187,8 @@ FROM (
     prioritas,
     status,
     dilaporkan_pada,
-    jatuh_tempo
+    jatuh_tempo,
+    petugas_penerima
 )
 JOIN pelapor p
     ON p.nomor_induk = data.nomor_induk
@@ -206,4 +205,5 @@ ON CONFLICT (nomor_tiket) DO UPDATE SET
     prioritas = EXCLUDED.prioritas,
     status = EXCLUDED.status,
     dilaporkan_pada = EXCLUDED.dilaporkan_pada,
-    jatuh_tempo = EXCLUDED.jatuh_tempo;
+    jatuh_tempo = EXCLUDED.jatuh_tempo,
+    petugas_penerima = EXCLUDED.petugas_penerima;

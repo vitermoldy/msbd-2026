@@ -4,11 +4,11 @@
 
 | Anggota | Kontribusi Commit |
 |---|---|
-| **Viter Moldy Kesuma** | `docs:` menambahkan readme pertemuan 3 dan Reflektif A <br>`feat:` add q01-q05 |
-| **Gideon Finsus Siburian** | `feat:` menambahkan q10-q15 <br> `docs:` menambahkan Reflektif C |
-| **Nadine Tantiara Hutagaol** | `feat:` menambahkan q19-q20 dan `r1_laporan_bulanan.sql` <br> `docs:` menambahkan Reflektif E dan bukti r1_10_baris.png |
-| **Rizky Cristian Fero Sihombing** | `feat:` menambahkan q06-q09 <br> `docs:` menambahkan Reflektif B |
-| **Siti Naifah Batubara** | `feat:` menambahkan q16-q18 <br> `docs:` menambahkan Reflektif D dan bukti |
+| **Viter Moldy Kesuma (251402079)** | `docs:` menambahkan readme pertemuan 3 dan Reflektif A <br>`feat:` add q01-q05 |
+| **Gideon Finsus Siburian (251402038)** | `feat:` menambahkan q10-q15 <br> `docs:` menambahkan Reflektif C |
+| **Nadine Tantiara Hutagaol (251402050)** | `feat:` menambahkan q19-q20 dan `r1_laporan_bulanan.sql` <br> `docs:` menambahkan Reflektif E dan bukti r1_10_baris.png |
+| **Rizky Cristian Fero Sihombing (251402056)** | `feat:` menambahkan q06-q09 <br> `docs:` menambahkan Reflektif B |
+| **Siti Naifah Batubara (251402067)** | `feat:` menambahkan q16-q18 <br> `docs:` menambahkan Reflektif D dan bukti |
 
 ## Pertanyaan Reflektif A - Subquery
 
@@ -44,17 +44,19 @@
 
 **1. Pada Q14, berapa tanggal yang berbeda, dan sifat data apa pada tabel payment yang menyebabkan perbedaan?**
 
-> Dari hasil Q14, terdapat 25 tanggal yang menghasilkan nilai rata-rata berbeda dari total 32 tanggal transaksi yang ada di Pagila. Perbedaan ini terjadi karena cara kerja `RANGE` dan `ROWS` dalam menentukan data yang masuk ke perhitungan rata-rata tidak sama.
->
-> Pada query ini, `RANGE BETWEEN 6 PRECEDING AND CURRENT ROW` melihat berdasarkan nilai tanggal, sedangkan `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` melihat 7 baris terakhir secara fisik. Karena data transaksi memiliki tanggal yang tidak selalu berurutan atau memiliki jarak antar tanggal, jumlah data yang dihitung oleh kedua frame tersebut bisa berbeda.
->
-> Jadi, perbedaan nilai `avg_range` dan `avg_rows` dipengaruhi oleh pola dan urutan tanggal pada data transaksi. Setelah beberapa baris, terutama ketika terdapat tanggal yang tidak berurutan, hasil dari kedua metode mulai menunjukkan perbedaan.
+> Berdasarkan perbandingan output Q13 dan Q14, terdapat perbedaan nilai pada beberapa tanggal tertentu (bukan semua 41 baris). Perbedaan ini terjadi karena sifat data tabel payment yang memiliki granularitas timestamp namun dikelompokkan per hari (DATE).
+> - Sifat Data Penyebab: Dalam satu tanggal kalender (misalnya 2017-04-30), bisa terdapat puluhan transaksi individual. Ketika menggunakan frame `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW`, PostgreSQL menghitung rata-rata berdasarkan 7 baris fisik terakhir. Jika ada tanggal dengan volume transaksi tinggi, jendela 7 baris ini bisa "terpotong" di tengah-tengah hari tersebut atau mencakup sebagian kecil dari hari sebelumnya.
+> - Sebaliknya, frame `RANGE` menganggap semua transaksi dalam satu tanggal yang sama sebagai satu kesatuan "peer". Sehingga rata-ratanya dihitung berdasarkan 7 hari kalender penuh, terlepas dari berapa banyak transaksi fisik di dalamnya. Inilah yang menyebabkan fluktuasi nilai rata_rata_7_hari antara kedua metode pada tanggal-tanggal dengan volume transaksi ekstrem.
 
 **2. Jika Q13 menjadi laporan resmi keuangan, versi mana yang benar dan mengapa kesalahan frame sulit ditemukan melalui pengujian biasa?**
 
-> Untuk laporan keuangan resmi, sebaiknya menggunakan frame yang ditulis secara jelas, yaitu `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` seperti pada Q13. Dengan begitu, rata-rata yang dihitung memang berdasarkan 7 baris terakhir, sesuai dengan kebutuhan rata-rata 7 hari.
+> Untuk laporan keuangan resmi, versi `ROWS` (seperti output Q13 saya) adalah yang paling benar untuk metrik `Cumulative Revenue`.
+> - Alasan Kebenaran: Output Q13 saya menunjukkan angka final 134.833,02 pada tanggal 2017-05-14. Angka ini adalah penjumlahan fisik murni dari seluruh omzet harian tanpa ada yang terlewat. Dalam akuntansi, running total harus merefleksikan realitas arus kas yang sebenarnya masuk ke rekening per satuan waktu (baris transaksi), bukan per konsep kalender abstrak.
+> - Kesulitan Deteksi Error: Kesalahan frame (misal tidak sengaja memakai `RANGE`) sangat sulit dideteksi lewat unit test biasa karena:
 >
-> Kesalahan dalam penggunaan frame cukup sulit ditemukan karena query yang salah belum tentu menghasilkan error. SQL-nya tetap bisa dijalankan dan angka yang keluar juga terlihat normal. Selain itu, pada data awal hasilnya bisa terlihat mirip dengan perhitungan yang benar karena jumlah baris yang dihitung masih sedikit. Perbedaannya baru lebih terlihat ketika data sudah bertambah banyak. Karena itu, untuk laporan resmi sebaiknya frame ditulis secara eksplisit agar hasil perhitungan tidak bergantung pada aturan default dan mengurangi risiko kesalahan.
+>    1.  Tidak Ada Error Syntax: Query tetap berjalan normal dan mengembalikan 41 baris data.
+>    2.  Nilai Terlihat "Wajar": Selisih antara ROWS dan RANGE seringkali hanya berupa desimal kecil atau terjadi hanya di tanggal-tanggal spesifik. Jika tester hanya mengecek total akhir atau rata-rata global, keduanya mungkin terlihat identik.
+>    3.  Data Uji Terlalu Rata: Jika data uji coba memiliki distribusi transaksi yang seragam (misal selalu 1 transaksi/hari), maka ROWS dan RANGE akan menghasilkan angka sama persis 100%, memberikan false positive bahwa query sudah benar padahal logika bisnisnya salah.
 
 
 **3. Pada Q15, apa yang terjadi pada total belanja jika ORDER BY ditambahkan ke dalam OVER tanpa menuliskan frame?**

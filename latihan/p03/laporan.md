@@ -44,27 +44,29 @@
 
 **1. Pada Q16, tanpa `GROUPING()`, bagaimana pembaca membedakan subtotal dari baris data yang kolomnya memang kosong?**
 
+> Q16: Tanpa menggunakan GROUPING() , baris subtotal yang dihasilkan oleh ROLLUP akan ditampilkan sebagai NULL. Hal ini dapat menyebabkan kebingungan karena sulit membedakan NULL yang merupakan subtotal atau grand total dengan NULL yang memang berasal dari data. Fungsi GROUPING() digunakan untuk membedakan keduanya, karena akan menghasilkan nilai 1 pada baris hasil agregasi ROLLUP. Nilai tersebut kemudian dapat ditampilkan sebagai teks seperti SEMUA agar hasilnya lebih mudah dipahami.
 
 
 **2. Pada Q17, mengapa versi `FILTER` dan `CASE WHEN` dapat memberi rata-rata berbeda walaupun jumlah baris sama?**
 
+> Q17: Q17 : FILTER (WHERE length > 90) dan CASE WHEN length > 90 THEN length END menghasilkan nilai rata-rata yang sama karena AVG() secara otomatis mengabaikan nilai NULL. Perbedaan akan terjadi jika CASE WHEN menggunakan ELSE 0. Dengan adanya ELSE 0, data dengan durasi ≤ 90 akan dianggap sebagai nilai 0 dan ikut dihitung dalam rata-rata. Akibatnya, nilai rata-rata yang dihasilkan menjadi lebih kecil.
 
 
 ## Pertanyaan Reflektif E - JSONB
 
 **1. Dari nomor transaksi, status, jumlah, dan identitas pelanggan di dalam payload, mana yang sebaiknya dipromosikan menjadi kolom relasional dengan constraint dan mana yang tepat tetap berada di JSON? Berikan alasan untuk setiap pilihan.**
 
-Menurut kelompok kami, nomor transaksi, status, jumlah, dan identitas pelanggan sebaiknya dipromosikan jadi kolom relasional. Data tersebut merupakan informasi utama untuk mencari, memfilter, mengurutkan, dan melakukan perhitungan. Jadi jika dijadikan kolom, kita bisa memberikan constraint seperti `NOT NULL`, `UNIQUE`, atau tipe data tertentu lainnya jadi datanya lebih teratur dan konsisten.
-
-Sedangkan buat data yang lebih fleksibel, seperti kontak pelanggan, lebih cocok tetap di `JSON`. Karena satu pelanggan bisa memiliki beberapa kontak dengan jenis yang berbeda, misalnya WhatsApp dan email, juga jumlah kontaknya ga selalu sama. Kalau dibuat menjadi banyak kolom, strukturnya malah bisa menjadi kurang fleksibel. Jadi, menurut kelompok kami data yang penting dan sering dipakai dalam proses database bagusnya dijadikan kolom relasional, sedangkan data yang sifatnya fleksibel dan tidak selalu memiliki struktur yang sama bisa tetap disimpan dalam `JSON`.
+> Menurut kelompok kami, nomor transaksi, status, jumlah, dan identitas pelanggan sebaiknya dipromosikan jadi kolom relasional. Data tersebut merupakan informasi utama untuk mencari, memfilter, mengurutkan, dan melakukan perhitungan. Jadi jika dijadikan kolom, kita bisa memberikan constraint seperti `NOT NULL`, `UNIQUE`, atau tipe data tertentu lainnya jadi datanya lebih teratur dan konsisten.
+>
+> Sedangkan buat data yang lebih fleksibel, seperti kontak pelanggan, lebih cocok tetap di `JSON`. Karena satu pelanggan bisa memiliki beberapa kontak dengan jenis yang berbeda, misalnya WhatsApp dan email, juga jumlah kontaknya ga selalu sama. Kalau dibuat menjadi banyak kolom, strukturnya malah bisa menjadi kurang fleksibel. Jadi, menurut kelompok kami data yang penting dan sering dipakai dalam proses database bagusnya dijadikan kolom relasional, sedangkan data yang sifatnya fleksibel dan tidak selalu memiliki struktur yang sama bisa tetap disimpan dalam `JSON`.
 
 ## Temuan Q14
 
-Pada Q14 dilakukan perbandingan antara window frame `RANGE` dan `ROWS` untuk menghitung rata-rata omzet harian.
-
-`RANGE BETWEEN 6 PRECEDING AND CURRENT ROW` menghitung berdasarkan rentang nilai pada kolom `tanggal`, sedangkan `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` menghitung berdasarkan 7 baris fisik terakhir.
-
-Perbedaan hasil dapat terjadi ketika terdapat tanggal yang tidak berurutan atau terdapat nilai tanggal yang sama. Dari percobaan ini dapat dilihat bahwa pemilihan `RANGE` atau `ROWS` perlu disesuaikan dengan kebutuhan analisis data.
+> Pada Q14 dilakukan perbandingan antara window frame `RANGE` dan `ROWS` untuk menghitung rata-rata omzet harian.
+>
+>`RANGE BETWEEN 6 PRECEDING AND CURRENT ROW` menghitung berdasarkan rentang nilai pada kolom `tanggal`, sedangkan `ROWS BETWEEN 6 PRECEDING AND CURRENT ROW` menghitung berdasarkan 7 baris fisik terakhir.
+>
+>Perbedaan hasil dapat terjadi ketika terdapat tanggal yang tidak berurutan atau terdapat nilai tanggal yang sama. Dari percobaan ini dapat dilihat bahwa pemilihan `RANGE` atau `ROWS` perlu disesuaikan dengan kebutuhan analisis data.
 
 ## Hasil R1
 

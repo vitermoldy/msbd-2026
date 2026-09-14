@@ -952,7 +952,10 @@ hanya me-mount folder p02, dan penamaannya `V1__…sql`; migrasi P04 memakai pol
 | Q1–Q4 — view dan check option | `739a6cf` | https://github.com/vitermoldy/msbd-2026/commit/739a6cfc12e8e4b4f76b69ba30ca684184057bdf |
 | Q5–Q8 — materialized view | `25203ba` | https://github.com/vitermoldy/msbd-2026/commit/25203bae9a6c7571c321fce057d2e59a7bdc6f07 |
 | Q9–Q13 — trigger audit (Naifah) | «menyusul» | |
-| Q14–Q17 — constraint (Nadine) | «menyusul» | |
+| Q14 — CHECK NOT VALID | `1fa0863` | https://github.com/vitermoldy/msbd-2026/commit/1fa0863a075b0d6de11be7ffc11ed529e6d6c31a |
+| Q15 — UNIQUE & soft delete | `306f913` | https://github.com/vitermoldy/msbd-2026/commit/306f913279537bd6606987ac4ff6d5bbea002971 |
+| Q16 — Foreign Key | `fe12dc9` | https://github.com/vitermoldy/msbd-2026/commit/fe12dc9c8688d7570a52494c17eb3b87de4dda69 |
+| Q17 — EXCLUDE | `36ce89d` | https://github.com/vitermoldy/msbd-2026/commit/36ce89dd6cb555d1cdd6068f3804964e3b6c6a1c |
 | Q18–Q21 — expand–contract dan migrasi (Finsus) | «menyusul» | |
 
 Seluruh commit berada di cabang `latihan/p04-sql2`.

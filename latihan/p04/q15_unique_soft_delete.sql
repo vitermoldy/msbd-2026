@@ -1,11 +1,19 @@
--- Diminta: menambah deleted_at, membuktikan UNIQUE biasa menghalangi judul yang sudah di soft-delete, lalu menggantinya dengan unique index partial.
--- Dipilih: film_id 9102 dan 9103 sebagai data uji agar data asli tidak terganggu.
--- Alternatif: langsung membuat unique index partial; tidak disarankan karena soal mau pembuktian masalah UNIQUE biasa.
+-- Diminta: tambahkan deleted_at, buktikan UNIQUE biasa pada title menghalangi pendaftaran ulang judul yang sudah soft-delete, lalu menggantinya dengan unique index parsial.
+-- Dipilih: film_id 9102 dan 9103 sebagai data uji.
+-- Alternatif: langsung menggunakan unique index parsial; tidak dianjurkan karena tugas mau pembuktian masalah UNIQUE biasa.
 
 SET search_path = lab4, public;
 
 ALTER TABLE lab4.film
 ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+ALTER TABLE lab4.film
+DROP CONSTRAINT IF EXISTS film_judul_unik;
+
+DROP INDEX IF EXISTS ux_film_judul_aktif;
+
+DELETE FROM lab4.film
+WHERE film_id IN (9102, 9103);
 
 ALTER TABLE lab4.film
 ADD CONSTRAINT film_judul_unik UNIQUE (title);

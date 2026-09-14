@@ -440,8 +440,337 @@ dijalankan.
 
 ### Q9–Q21
 
-«Belum dikerjakan. Q9–Q13 oleh Naifah (Langkah 4), Q14–Q17 oleh Nadine (Langkah 5),
+«Belum dikerjakan. Q9–Q13 oleh Naifah (Langkah 4),
 Q18–Q21 oleh Finsus (Langkah 6).»
+
+### Q14 — `q14_check_not_valid.sql` · Check bertahap dengan NOT VALID
+
+**Perintah** 
+
+```sql
+INSERT INTO lab4.film
+    (film_id, title, rental_rate, rating)
+VALUES
+    (9101, 'FILM UJI NEGATIF', -1.00, 'PG');
+
+ALTER TABLE lab4.film
+ADD CONSTRAINT film_rental_rate_nonneg
+CHECK (rental_rate >= 0) NOT VALID;
+
+SELECT conname, convalidated
+FROM pg_constraint
+WHERE conrelid = 'lab4.film'::regclass
+  AND conname = 'film_rental_rate_nonneg';
+```
+
+**Keluaran**
+
+```text
+INSERT 0 1
+ALTER TABLE
+
+         conname          | convalidated
+--------------------------+--------------
+ film_rental_rate_nonneg | f
+```
+
+Kemudian dilakukan validasi:
+
+```sql
+ALTER TABLE lab4.film
+VALIDATE CONSTRAINT film_rental_rate_nonneg;
+```
+
+```text
+ERROR: check constraint "film_rental_rate_nonneg" of relation "film" is violated by some row
+```
+
+Setelah data diperbaiki:
+
+```sql
+UPDATE lab4.film
+SET rental_rate = 1.00
+WHERE film_id = 9101;
+
+ALTER TABLE lab4.film
+VALIDATE CONSTRAINT film_rental_rate_nonneg;
+```
+
+```text
+UPDATE 1
+ALTER TABLE
+```
+**Penjelasan**
+
+Constraint `CHECK (rental_rate >= 0)` ditambahkan menggunakan `NOT VALID`, sehingga constraint berhasil dibuat walaupun masih terdapat data dengan `rental_rate` negatif. Nilai `convalidated = f` menunjukkan constraint belum tervalidasi.
+
+Saat `VALIDATE CONSTRAINT` dijalankan, PostgreSQL menemukan nilai `-1.00` sehingga validasi gagal. Setelah nilai tersebut diperbaiki menjadi `1.00`, validasi dijalankan kembali dan berhasil.
+
+**Alasan keputusan.** `film_id` 9101 digunakan sebagai data uji agar mudah ditemukan dan tidak mengganggu data film asli. Penggunaan `NOT VALID` dipilih karena tugas meminta pembuktian validasi dilakukan dalam dua tahap.
+
+---
+
+### Q15 — `q15_soft_delete_unique.sql` · UNIQUE dan Unique Index Parsial
+
+**Perintah**
+
+```sql
+ALTER TABLE lab4.film
+ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+ALTER TABLE lab4.film
+DROP CONSTRAINT IF EXISTS film_judul_unik;
+
+DROP INDEX IF EXISTS ux_film_judul_aktif;
+
+DELETE FROM lab4.film
+WHERE film_id IN (9102, 9103);
+
+ALTER TABLE lab4.film
+ADD CONSTRAINT film_judul_unik UNIQUE (title);
+
+INSERT INTO lab4.film
+    (film_id, title, rental_rate, rating)
+VALUES
+    (9102, 'FILM UJI SOFT DELETE', 2.99, 'PG');
+
+UPDATE lab4.film
+SET deleted_at = now()
+WHERE film_id = 9102;
+
+INSERT INTO lab4.film
+    (film_id, title, rental_rate, rating)
+VALUES
+    (9103, 'FILM UJI SOFT DELETE', 2.99, 'PG');
+```
+
+**Keluaran**
+
+```text
+INSERT 0 1
+UPDATE 1
+
+ERROR: duplicate key value violates unique constraint "film_judul_unik"
+DETAIL: Key (title)=(FILM UJI SOFT DELETE) already exists.
+```
+
+**Pengujian**
+
+```sql
+ALTER TABLE lab4.film
+DROP CONSTRAINT film_judul_unik;
+
+CREATE UNIQUE INDEX ux_film_judul_aktif
+ON lab4.film (title)
+WHERE deleted_at IS NULL;
+
+INSERT INTO lab4.film
+    (film_id, title, rental_rate, rating)
+VALUES
+    (9103, 'FILM UJI SOFT DELETE', 2.99, 'PG');
+
+SELECT film_id, title, deleted_at
+FROM lab4.film
+WHERE title = 'FILM UJI SOFT DELETE';
+```
+
+**Keluaran**
+
+```text
+INSERT 0 1
+
+ film_id |         title         |       deleted_at
+---------+-----------------------+------------------------
+    9102 | FILM UJI SOFT DELETE  | 2026-09-...
+    9103 | FILM UJI SOFT DELETE  |
+```
+
+**Penjelasan**
+
+`UNIQUE` biasa tetap menganggap judul dari data yang sudah di-soft-delete sebagai judul yang sudah digunakan. Karena itu, data 9103 dengan judul yang sama ditolak.
+
+Setelah `UNIQUE` biasa diganti dengan unique index parsial, aturan unik hanya berlaku pada data yang memiliki `deleted_at IS NULL`. Data 9102 yang sudah di-soft-delete tidak lagi menghalangi penggunaan judul yang sama pada data 9103.
+
+**Alasan keputusan.** `film_id` 9102 dan 9103 dipakai jadi data uji agar proses soft-delete dan pendaftaran ulang judul bisa dibedakan jelas. Unique index parsial dipilih karena sesuai dengan kebutuhan soft-delete.
+
+
+### Q16 — `q16_fk_aksi_referensial.sql` · Foreign Key dan Aksi Referensial
+
+**Perintah**
+
+```sql
+DROP TABLE IF EXISTS lab4.ulasan CASCADE;
+
+CREATE TABLE lab4.ulasan (
+    ulasan_id bigserial PRIMARY KEY,
+    film_id integer,
+    isi text NOT NULL
+);
+
+INSERT INTO lab4.film
+    (film_id, title, rental_rate, rating)
+VALUES
+    (9201, 'FILM UJI NO ACTION', 2.99, 'PG'),
+    (9202, 'FILM UJI CASCADE', 2.99, 'PG'),
+    (9203, 'FILM UJI SET NULL', 2.99, 'PG');
+
+ALTER TABLE lab4.ulasan
+ADD CONSTRAINT fk_ulasan_film
+FOREIGN KEY (film_id)
+REFERENCES lab4.film(film_id)
+ON DELETE NO ACTION;
+
+INSERT INTO lab4.ulasan (film_id, isi)
+VALUES (9201, 'Ulasan NO ACTION');
+
+DELETE FROM lab4.film
+WHERE film_id = 9201;
+```
+
+**Keluaran — NO ACTION**
+
+```text
+INSERT 0 1
+
+ERROR: update or delete on table "film" violates foreign key constraint "fk_ulasan_film" on table "ulasan"
+DETAIL: Key (film_id)=(9201) is still referenced from table "ulasan".
+```
+
+**Pengujian — CASCADE**
+
+```sql
+ALTER TABLE lab4.ulasan
+DROP CONSTRAINT fk_ulasan_film;
+
+ALTER TABLE lab4.ulasan
+ADD CONSTRAINT fk_ulasan_film
+FOREIGN KEY (film_id)
+REFERENCES lab4.film(film_id)
+ON DELETE CASCADE;
+
+INSERT INTO lab4.ulasan (film_id, isi)
+VALUES (9202, 'Ulasan CASCADE');
+
+DELETE FROM lab4.film
+WHERE film_id = 9202;
+
+SELECT *
+FROM lab4.ulasan
+WHERE film_id = 9202;
+```
+
+**Keluaran**
+
+```text
+INSERT 0 1
+DELETE 1
+
+(0 rows)
+```
+
+**Pengujian — SET NULL**
+
+```sql
+ALTER TABLE lab4.ulasan
+DROP CONSTRAINT fk_ulasan_film;
+
+ALTER TABLE lab4.ulasan
+ADD CONSTRAINT fk_ulasan_film
+FOREIGN KEY (film_id)
+REFERENCES lab4.film(film_id)
+ON DELETE SET NULL;
+
+INSERT INTO lab4.ulasan (film_id, isi)
+VALUES (9203, 'Ulasan SET NULL');
+
+DELETE FROM lab4.film
+WHERE film_id = 9203;
+
+SELECT *
+FROM lab4.ulasan
+WHERE isi = 'Ulasan SET NULL';
+```
+
+**Keluaran**
+
+```text
+INSERT 0 1
+DELETE 1
+
+ ulasan_id | film_id |       isi
+-----------+---------+-------------------
+         2 |         | Ulasan SET NULL
+```
+
+**Penjelasan**
+
+`NO ACTION` menolak penghapusan film apabila masih ada ulasan mengacu pada film tersebut. `CASCADE` menghapus ulasan ketika film induknya dihapus. Sedangkan `SET NULL` mempertahankan data ulasan, tapi nilai `film_id` diubah jadi `NULL`.
+
+**Alasan keputusan.** Tiga film uji digunakan agar `NO ACTION`, `CASCADE`, dan `SET NULL` bisa diuji terpisah dan tidak saling ganggu.
+
+
+### Q17 — `q17_exclude_harga.sql` · EXCLUDE untuk Periode Harga
+
+**Perintah**
+
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+DROP TABLE IF EXISTS lab4.harga_film CASCADE;
+
+CREATE TABLE lab4.harga_film (
+    harga_film_id bigserial PRIMARY KEY,
+    film_id integer NOT NULL REFERENCES lab4.film (film_id),
+    wilayah text NOT NULL,
+    harga numeric(5,2) NOT NULL CHECK (harga >= 0),
+    berlaku daterange NOT NULL,
+
+    EXCLUDE USING gist (
+        film_id WITH =,
+        wilayah WITH =,
+        berlaku WITH &&
+    )
+);
+
+INSERT INTO lab4.harga_film
+    (film_id, wilayah, harga, berlaku)
+VALUES
+    (1, 'Indonesia', 10.00,
+     daterange('2026-01-01', '2026-02-01', '[)'));
+```
+
+**Keluaran**
+
+```text
+CREATE EXTENSION
+DROP TABLE
+CREATE TABLE
+INSERT 0 1
+```
+
+**Pengujian**
+
+```sql
+INSERT INTO lab4.harga_film
+    (film_id, wilayah, harga, berlaku)
+VALUES
+    (1, 'Indonesia', 12.00,
+     daterange('2026-01-15', '2026-02-15', '[)'));
+```
+
+**Keluaran**
+
+```text
+ERROR: conflicting key value violates exclusion constraint
+```
+
+**Penjelasan**
+
+Constraint `EXCLUDE` memastikan periode harga `film_id` dan `wilayah` yang sama tidak saling tumpang tindih. Data pertama berhasil dimasukkan jika tidak ada periode yang bertabrakan.
+
+Data kedua ditolak jika periodenya tumpang tindih dengan data pertama. Periode pertama 1 Januari sampai 1 Februari 2026, sedangkan periode kedua adalah 15 Januari sampai 15 Februari 2026.
+
+**Alasan keputusan.** `daterange` digunakan karena periode harga menggunakan tanggal. `btree_gist` digunakan agar `film_id` dan `wilayah` bisa dipakai dalam constraint `EXCLUDE`. EXCLUDE dipilih karena aturan periode tidak boleh bertumpang tindih bisa langsung dijaga oleh database tanpa pakai trigger.
 
 ---
 
@@ -563,7 +892,13 @@ kegagalan yang terlihat menjadi kelambatan yang membingungkan.
 
 ### Refleksi D — EXCLUDE lawan trigger pemeriksa
 
-«Ditulis oleh Nadine setelah Q17 selesai.»
+Aturan periode harga sebenarnya bisa dibuat menggunakan trigger yang mengecek dulu data di tabel sebelum melakukan `INSERT`. Masalahnya muncul ketika **dua transaksi berjalan secara bersamaan**. Kedua transaksi bisa sama-sama mengecek tabel saat data dari transaksi lainnya belum masuk, sehingga keduanya menganggap tidak ada periode yang bentrok.
+
+Akibatnya, **kedua data bisa berhasil masuk**, padahal kalau dilihat bersamaan periodenya ternyata saling tumpang tindih.
+
+Berbeda dengan trigger, `EXCLUDE` menjadi **aturan langsung pada tabel**. PostgreSQL akan mengecek aturan tersebut ketika data dimasukkan dan menangani kondisi transaksi yang berjalan bersamaan. Jadi data dengan `film_id`, wilayah, dan periode yang saling bertabrakan tetap dapat dicegah masuk.
+
+Menurut saya, `EXCLUDE` lebih aman untuk kasus ini karena aturan tidak tumpang tindih **langsung dijaga oleh database**, bukan hanya berdasarkan pengecekan dari trigger.
 
 ### Refleksi E — Jarak rilis 0045 ke 0046
 

@@ -9,7 +9,7 @@
 | Basis data | Pagila pada PostgreSQL 17, skema kerja `lab4` |
 | Cabang | `latihan/p04-sql2` |
 | Repositori | https://github.com/vitermoldy/msbd-2026 |
-| Merge request | «tempel tautan MR di sini» |
+| Merge request | https://github.com/vitermoldy/msbd-2026/pull/2 |
 | Versi PostgreSQL | PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, 64-bit |
 | Tanggal pengerjaan | 14 – 16 September 2026 |
 
@@ -20,7 +20,7 @@
 >
 > Tiga hal yang masih harus dilengkapi sebelum pengumpulan: **catatan sesi pembaca Q18–Q20**
 > (lihat Bagian 6 — fase expand–contract belum pernah dijalankan dengan sesi pembaca hidup di
-> mesin penyusun laporan), **tautan merge request**, dan **commit atas nama Rizky**.
+> mesin penyusun laporan) dan **commit atas nama Rizky**.
 >
 > Jawaban Q18–Q21 memuat bagian **Temuan pemeriksaan silang** yang mencatat tiga hal yang
 > perlu diperbaiki: kesalahan tipe `daterange` pada trigger tulis ganda, `DROP COLUMN` yang

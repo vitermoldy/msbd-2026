@@ -270,11 +270,13 @@ ORDER BY 1, 2;
 **Keluaran**
 
 ```text
-«jumlah baris hasil: sekitar 13 bulan x 4 kanal»
+(52 rows)   -- 13 bulan x 4 kanal
 
-Pengukuran 1: «… ms»
-Pengukuran 2: «… ms»
-Pengukuran 3: «… ms»
+Pengukuran 1: 757.324 ms
+Pengukuran 2: 575.254 ms
+Pengukuran 3: 560.882 ms
+
+EXPLAIN (ANALYZE, BUFFERS): 651.988 ms
 ```
 
 **Alasan keputusan.** Query dijalankan apa adanya dengan `\timing on` sebagai garis dasar,
@@ -311,8 +313,11 @@ REFRESH MATERIALIZED VIEW lab4.ringkasan_akses;   -- catat waktunya
 Galat pembacaan sebelum refresh ada di bagian 3 laporan ini.
 
 ```text
-REFRESH MATERIALIZED VIEW — «… ms»
-baris_matview = «…»
+CREATE MATERIALIZED VIEW      — 6.398 ms
+REFRESH MATERIALIZED VIEW     — 581.082 ms
+SELECT count(*) dari matview  — 0.303 ms
+
+baris_matview = 52
 matviewname     | ispopulated
 ringkasan_akses | t
 ```
@@ -348,8 +353,9 @@ REFRESH MATERIALIZED VIEW lab4.ringkasan_akses;                -- pembanding
 Galat percobaan pertama ada di bagian 3 laporan ini.
 
 ```text
-REFRESH MATERIALIZED VIEW CONCURRENTLY — «… ms»
-REFRESH MATERIALIZED VIEW (biasa)      — «… ms»
+CREATE UNIQUE INDEX                    — 1.770 ms
+REFRESH MATERIALIZED VIEW CONCURRENTLY — 550.398 ms
+REFRESH MATERIALIZED VIEW (biasa)      — 597.480 ms
 ```
 
 **Alasan pemilihan kolom index.** `UNIQUE INDEX` dipasang pada `(bulan, kanal)` karena
@@ -375,6 +381,23 @@ memelihara index.
 Jadi refresh concurrent mengerjakan seluruh pekerjaan refresh biasa, ditambah membangun tabel
 sementara, ditambah satu operasi pencocokan, ditambah DML beserta WAL-nya. Yang ditukar
 adalah waktu: lebih lambat, tetapi pembaca tidak pernah diblokir.
+
+**Yang terjadi pada pengukuran kami, dan ini menarik.** Angka yang terukur justru sebaliknya:
+refresh concurrent 550.398 ms, refresh biasa 597.480 ms. Concurrent malah sedikit lebih cepat.
+
+Penjelasannya bukan bahwa uraian di atas keliru, melainkan bahwa kedua refresh dijalankan
+berurutan **tanpa ada perubahan data di antaranya**. Pencocokan yang dilakukan refresh
+concurrent karena itu tidak menemukan satu pun baris berbeda, sehingga tidak ada `INSERT`,
+`UPDATE`, maupun `DELETE` yang diterbitkan — bagian termahal dari refresh concurrent justru
+tidak terpakai sama sekali. Yang tersisa hanya biaya menghitung ulang agregasi atas 900000
+baris, dan itu sama untuk kedua mode. Refresh biasa sementara itu tetap menulis heap baru dan
+membangun ulang index meski hasilnya identik dengan isi lama.
+
+Pelajarannya: biaya tambahan refresh concurrent sebanding dengan **banyaknya baris matview
+yang benar-benar berubah**, bukan dengan besarnya tabel sumber. Pada matview kecil seperti
+`ringkasan_akses` yang hanya 52 baris, biaya itu nyaris tak terukur. Untuk memperlihatkan sisi
+sebaliknya, pengukuran harus diulang setelah menyisipkan data baru dalam jumlah besar
+sehingga banyak baris matview berubah nilainya.
 
 ---
 
@@ -1525,25 +1548,52 @@ tangan.
 
 | Tugas | Yang diukur | Waktu | Penafsiran |
 |---|---|---:|---|
-| Q5 | Agregasi langsung atas 500000 baris, pengukuran 1 | «… ms» | Cache dingin, biasanya paling lambat |
-| Q5 | Agregasi langsung, pengukuran 2 | «… ms» | |
-| Q5 | Agregasi langsung, pengukuran 3 | «… ms» | Angka yang dipakai sebagai garis dasar |
-| Q6 | `REFRESH` biasa pertama | «… ms» | Hitung ulang penuh, tukar isi sekaligus |
-| Q6 | Membaca matview setelah terisi | «… ms» | Bandingkan dengan Q5 — inilah keuntungan matview |
-| Q7 | `REFRESH CONCURRENTLY` setelah index unik | «… ms» | Lebih lambat: ada tabel sementara, pencocokan, dan DML |
-| Q7 | `REFRESH` biasa, kondisi data sama | «… ms» | Pembanding adil untuk baris di atasnya |
+| Q5 | Agregasi langsung atas 900000 baris, pengukuran 1 | 757.324 ms | Cache dingin, paling lambat |
+| Q5 | Agregasi langsung, pengukuran 2 | 575.254 ms | Cache mulai hangat |
+| Q5 | Agregasi langsung, pengukuran 3 | 560.882 ms | Angka yang dipakai sebagai garis dasar |
+| Q5 | `EXPLAIN ANALYZE` atas query yang sama | 651.988 ms | Tidak sebanding dengan baris di atasnya: tidak menghitung waktu pengiriman hasil |
+| Q6 | `REFRESH` biasa pertama | 581.082 ms | Hitung ulang penuh, tukar isi sekaligus |
+| Q6 | Membaca matview setelah terisi (`count(*)`) | 0.303 ms | Sekitar 1850 kali lebih cepat daripada menghitung langsung |
+| Q7 | `REFRESH CONCURRENTLY` setelah index unik | 550.398 ms | Data tidak berubah sejak refresh sebelumnya, sehingga pencocokan tidak menghasilkan DML |
+| Q7 | `REFRESH` biasa, kondisi data sama | 597.480 ms | Tetap menulis heap baru dan membangun ulang index meski isinya identik |
 | Q12 | UPDATE massal, trigger baris aktif | 85.214 ms | Fungsi audit dijalankan untuk setiap baris yang diperbarui |
 | Q12 | UPDATE massal, trigger nonaktif | 4.823 ms | Tanpa trigger audit, sehingga proses UPDATE lebih cepat |
 | Q13 | UPDATE massal, trigger pernyataan | 12.451 ms | Fungsi audit dijalankan satu kali dan perubahan 1.000 baris diproses sekaligus |
 
 **Penafsiran keseluruhan.**
 
-- **Q5 lawan pembacaan matview.** «Isi setelah angkanya lengkap: berapa kali lipat lebih
-  cepat, dan apa artinya bagi laporan yang dibuka berulang kali dalam sehari.»
-- **Q6 lawan Q7.** «Isi: selisih refresh biasa dan concurrent, lalu kaitkan dengan pekerjaan
-  tambahan yang dijelaskan pada jawaban Q7.»
+- **Q5 lawan pembacaan matview.** Menghitung langsung memakan 560.882 ms pada pengukuran
+  paling stabil, sedangkan membaca hasil yang sudah tersimpan di matview hanya 0.303 ms —
+  sekitar 1850 kali lebih cepat. Selisih itu dibayar sekali per refresh, bukan sekali per
+  pembukaan laporan. Untuk laporan yang dibuka seratus kali sehari, biaya agregasi turun dari
+  seratus kali 560 ms menjadi beberapa kali 580 ms saja. Di sinilah materialized view
+  membayar dirinya sendiri: makin sering laporan dibuka, makin besar keuntungannya, dan yang
+  dikorbankan hanyalah kesegaran data sebesar jarak antar refresh.
+- **Q6 lawan Q7.** Pada pengukuran kami refresh concurrent (550.398 ms) justru **sedikit
+  lebih cepat** daripada refresh biasa (597.480 ms) — berbeda dari dugaan umum bahwa
+  concurrent selalu lebih lambat. Penyebabnya terbaca dari kondisi pengujian: kedua refresh
+  dijalankan berurutan tanpa ada perubahan data di antaranya, sehingga pencocokan yang
+  dilakukan refresh concurrent tidak menemukan satu pun baris berbeda dan tidak menerbitkan
+  `INSERT`, `UPDATE`, maupun `DELETE` sama sekali. Yang tersisa hanyalah biaya menghitung
+  ulang agregasi atas 900000 baris, dan biaya itu sama untuk kedua mode. Sementara itu
+  refresh biasa tetap menulis heap baru dan membangun ulang index meski isinya identik.
+  Ukuran matview yang hanya 52 baris juga membuat porsi kerja tambahan milik concurrent nyaris
+  tak terasa. Kesimpulannya: kerugian waktu refresh concurrent sebanding dengan **banyaknya
+  baris yang berubah**, bukan dengan besarnya tabel sumber. Pada matview kecil yang jarang
+  berubah isinya, concurrent bisa sama cepat atau bahkan lebih cepat, sekaligus tetap tidak
+  memblokir pembaca. Untuk membuktikan sisi sebaliknya, pengukuran perlu diulang setelah
+  menyisipkan data baru dalam jumlah besar sehingga banyak baris matview benar-benar berubah.
 - **Q12 lawan Q13.** «Hasil pengujian menunjukkan bahwa Q13 membutuhkan waktu lebih singkat dibandingkan Q12. Q12 membutuhkan waktu **85.214 ms**, sedangkan Q13 hanya **12.451 ms** untuk meng-update 1.000 baris. Hal ini terjadi karena pada Q12 fungsi audit dijalankan untuk setiap baris yang berubah, sedangkan pada Q13 fungsi audit cukup dijalankan satu kali untuk seluruh proses `UPDATE`. Dari hasil tersebut, penggunaan *statement-level trigger* pada pengujian ini lebih efisien untuk proses update dalam jumlah banyak.»
 
+
+---
+
+**Kondisi pengukuran.** Seluruh angka Q5, Q6, dan Q7 di atas diukur **setelah** Q8
+dijalankan, yaitu ketika `lab4.jejak_akses` sudah berisi **900000 baris** (500000 dari
+`q00_setup.sql` ditambah dua kali 200000 dari kedua putaran Q8), bukan 500000 baris seperti
+saat pengerjaan Langkah 3 pertama kali. Angka Q12 dan Q13 diukur pada `lab4.film` berisi
+sekitar 1000 baris. Matview `lab4.ringkasan_akses` berisi 52 baris, yaitu 13 bulan dikali 4
+kanal. Seluruh pengukuran memakai `\timing` bawaan psql pada container `msbd-pg`.
 
 ---
 

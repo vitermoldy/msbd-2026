@@ -438,10 +438,88 @@ dijalankan.
 
 ---
 
-### Q9–Q21
+### Q9 — `q09_trigger_audit_baris.sql` · Trigger Audit Level Baris
 
-«Belum dikerjakan. Q9–Q13 oleh Naifah (Langkah 4),
-Q18–Q21 oleh Finsus (Langkah 6).»
+**Perintah**
+
+```sql
+CREATE TABLE IF NOT EXISTS lab4.audit_harga (
+    audit_id bigserial PRIMARY KEY,
+    film_id integer NOT NULL,
+    harga_lama numeric(5,2),
+    harga_baru numeric(5,2),
+    diubah_oleh text NOT NULL DEFAULT current_user,
+    diubah_pada timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION lab4.catat_audit_harga()
+RETURNS trigger AS $$
+BEGIN
+    INSERT INTO lab4.audit_harga (film_id, harga_lama, harga_baru)
+    VALUES (OLD.film_id, OLD.rental_rate, NEW.rental_rate);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS film_audit_harga ON lab4.film;
+
+CREATE TRIGGER film_audit_harga
+AFTER UPDATE OF rental_rate ON lab4.film
+FOR EACH ROW
+WHEN (OLD.rental_rate IS DISTINCT FROM NEW.rental_rate)
+EXECUTE FUNCTION lab4.catat_audit_harga();
+```
+**Keluaran**
+
+```text
+CREATE TABLE
+CREATE FUNCTION
+DROP TRIGGER
+CREATE TRIGGER
+```
+**Alasan keputusan.** Klausa `AFTER UPDATE OF rental_rate` digunakan untuk menghindari
+*overhead* eksekusi yang tidak perlu ketika terjadi perubahan pada kolom selain harga sewa.
+Selain itu, penggunaan operator `IS DISTINCT FROM` diterapkan untuk menjamin perbandingan nilai
+lama dan nilai baru tetap konsisten serta aman dari potensi masalah nilai `NULL` (*NULL-safe*).
+
+### Q10 — `q10_uji_audit_baris.sql` · Pengujian Trigger Audit Baris
+
+**Perintah**
+
+```sql
+TRUNCATE TABLE lab4.audit_harga;
+
+-- Uji 1: Mengubah harga
+UPDATE lab4.film SET rental_rate = 9.99 WHERE film_id = 1;
+
+-- Uji 2: Menulis ulang harga yang sama persis
+UPDATE lab4.film SET rental_rate = 9.99 WHERE film_id = 1;
+
+-- Uji 3: Mengubah title saja
+UPDATE lab4.film SET title = 'NEW TITLE' WHERE film_id = 1;
+
+SELECT audit_id, film_id, harga_lama, harga_baru, diubah_oleh FROM lab4.audit_harga;
+```
+**Keluaran**
+
+```text
+TRUNCATE TABLE
+UPDATE 1
+UPDATE 1
+UPDATE 1
+
+ audit_id | film_id | harga_lama | harga_baru | diubah_oleh 
+----------+---------+------------+------------+-------------
+        1 |       1 |       0.99 |       9.99 | msbd
+(1 row)
+```
+**Alasan keputusan.** Pengujian ini dilakukan untuk memverifikasi efektivitas filter kondisi
+pada *trigger* secara langsung:
+* **Uji 1:** Memastikan *log* audit berhasil dicatat ketika terjadi perubahan harga sewa yang valid.
+* **Uji 2:** Membuktikan bahwa filter `WHEN (OLD.rental_rate IS DISTINCT FROM NEW.rental_rate)` mampu
+  menahan pencatatan *log* redundant saat nilai harga baru sama dengan nilai lama.
+* **Uji 3:** Membuktikan klausa `AFTER UPDATE OF rental_rate` tidak memicu *trigger* jika pembaruan data hanya terjadi pada kolom lain (seperti `title`).
+
 
 ### Q14 — `q14_check_not_valid.sql` · Check bertahap dengan NOT VALID
 

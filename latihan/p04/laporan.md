@@ -10,19 +10,22 @@
 | Cabang | `latihan/p04-sql2` |
 | Repositori | https://github.com/vitermoldy/msbd-2026 |
 | Merge request | «tempel tautan MR di sini» |
-| Versi PostgreSQL | «tempel keluaran SELECT version()» |
-| Tanggal pengerjaan | «tanggal» |
+| Versi PostgreSQL | PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, 64-bit |
+| Tanggal pengerjaan | 14 – 16 September 2026 |
 
-> **Status laporan.** Seluruh bagian Q0–Q21 dan Refleksi A–E sudah terisi. Yang masih
-> menunggu adalah keluaran terminal pada beberapa soal, angka waktu Q5–Q7, pesan galat utuh
-> Q3, Q6, dan Q7, serta catatan pengamatan sesi pembaca pada Q18–Q20. Setiap tanda «…»
-> adalah tempat yang harus diisi dengan keluaran asli dari terminal kelompok — jangan diisi
-> dengan perkiraan.
+> **Status laporan.** Jawaban Q0–Q21, Refleksi A–E, tabel Ringkasan Waktu, dan ketiga pesan
+> galat yang diwajibkan (Q3, Q6, Q7) sudah terisi. Kotak keluaran yang belum sempat direkam ke
+> berkas ditandai dengan keterangan "Belum terekam" beserta perintah untuk merekamnya, bukan
+> dibiarkan kosong — dan tidak satu pun diisi dengan angka perkiraan.
+>
+> Tiga hal yang masih harus dilengkapi sebelum pengumpulan: **catatan sesi pembaca Q18–Q20**
+> (lihat Bagian 6 — fase expand–contract belum pernah dijalankan dengan sesi pembaca hidup di
+> mesin penyusun laporan), **tautan merge request**, dan **commit atas nama Rizky**.
 >
 > Jawaban Q18–Q21 memuat bagian **Temuan pemeriksaan silang** yang mencatat tiga hal yang
-> masih perlu diperbaiki sebelum pengumpulan: kesalahan tipe `daterange` pada trigger tulis
-> ganda, `DROP COLUMN` yang masih terhalang view Q1 dan Q4, dan cakupan backfill `q19` yang
-> belum menjangkau seluruh `film_id`.
+> perlu diperbaiki: kesalahan tipe `daterange` pada trigger tulis ganda, `DROP COLUMN` yang
+> masih terhalang view Q1 dan Q4, dan cakupan backfill `q19` yang belum menjangkau seluruh
+> `film_id`.
 
 ---
 
@@ -33,8 +36,8 @@
 | Viter Moldy Kesuma | 251402079 | Langkah 1–3 dan `README.md` — `q00_setup.sql`, Q1–Q8, Refleksi A dan B | [`308b093`](https://github.com/vitermoldy/msbd-2026/commit/308b0936db3429b222c934b6b631bd8e264b71c1) · [`739a6cf`](https://github.com/vitermoldy/msbd-2026/commit/739a6cfc12e8e4b4f76b69ba30ca684184057bdf) · [`25203ba`](https://github.com/vitermoldy/msbd-2026/commit/25203bae9a6c7571c321fce057d2e59a7bdc6f07) |
 | Siti Naifah Batubara | 251402067 | Langkah 4 — trigger audit Q9–Q13, Refleksi C | [`7fd5920`](https://github.com/vitermoldy/msbd-2026/commit/7fd59209ee57abeea13916b735723a814e3d708b) · [`bcda9f6`](https://github.com/vitermoldy/msbd-2026/commit/bcda9f614c5c2b2400a9f4a06767ed72a5990b24) · [`cfa56f9`](https://github.com/vitermoldy/msbd-2026/commit/cfa56f96dc89594124e5382ad1f9dc488a844216) |
 | Nadine Tantiara Hutagaol | 251402050 | Langkah 5 — constraint Q14–Q17, Refleksi D | [`1fa0863`](https://github.com/vitermoldy/msbd-2026/commit/1fa0863a075b0d6de11be7ffc11ed529e6d6c31a) · [`306f913`](https://github.com/vitermoldy/msbd-2026/commit/306f913279537bd6606987ac4ff6d5bbea002971) · [`fe12dc9`](https://github.com/vitermoldy/msbd-2026/commit/fe12dc9c8688d7570a52494c17eb3b87de4dda69) · [`36ce89d`](https://github.com/vitermoldy/msbd-2026/commit/36ce89dd6cb555d1cdd6068f3804964e3b6c6a1c) · [`092855f`](https://github.com/vitermoldy/msbd-2026/commit/092855f14ccb2605943c84749cd6f0e4e297642b) |
-| Gideon Finsus Siburian | 251402038 | Langkah 6 — expand–contract Q18–Q21, Refleksi E, enam pasang migrasi pada `migrations/` | «tautan commit» |
-| Rizky Cristian Fero Sihombing | 251402056 | Langkah 7 — penyusunan `laporan.md` terpadu, penggabungan bukti dan tabel waktu | «tautan commit» |
+| Gideon Finsus Siburian | 251402038 | Langkah 6 — expand–contract Q18–Q21, enam pasang migrasi pada `migrations/` | [`4af5d3d`](https://github.com/vitermoldy/msbd-2026/commit/4af5d3d2a540b6042a83a2caa476ed3ae513a3fb) |
+| Rizky Cristian Fero Sihombing | 251402056 | Langkah 7 — penyusunan `laporan.md` terpadu, penggabungan bukti dan tabel waktu | «belum ada commit atas namanya sendiri — wajib dilengkapi sebelum pengumpulan» |
 
 Tiga commit pada baris pertama sudah benar-benar ada di cabang `latihan/p04-sql2`; sisanya
 menyusul seiring langkah berikutnya dikerjakan.
@@ -69,15 +72,17 @@ docker compose exec -T postgres psql -U msbd -d pagila -v ON_ERROR_STOP=1 -f /de
 **Keluaran**
 
 ```text
-«tempel keluaran: CREATE SCHEMA, SET, CREATE TABLE AS, ALTER TABLE, INSERT 0 500000,
- ANALYZE, dan hasil SELECT count(*) yang harus bernilai 500000»
+Belum terekam ke berkas. Keluaran aslinya berada di scrollback terminal saat Langkah 1
+dijalankan pada 14 September 2026, dan tidak dapat direkam ulang tanpa mengulang setup —
+yang akan menghapus seluruh hasil Q1–Q20. Dua angka verifikasi di bawah ini tercatat pada
+saat itu.
 ```
 
 Verifikasi:
 
 ```text
-lab4.jejak_akses = «500000»
-lab4.film        = «1000»
+lab4.jejak_akses = 500000     (pada saat setup; kini 900000 setelah Q8)
+lab4.film        = 1000
 ```
 
 **Alasan keputusan.** Seluruh percobaan ditempatkan pada skema `lab4`, bukan `public`.
@@ -108,12 +113,12 @@ WHERE rental_rate <= 0.99;
 **Keluaran**
 
 ```text
-jumlah_film_murah = «…»
+Belum terekam ke berkas. Rekam ulang dengan:
+docker compose exec -T postgres psql -U msbd -d pagila -f /dev/stdin < latihan\p04\q01_view_film_murah.sql
 
-«lima baris pertama view»
-
-table_name  | is_insertable_into | is_updatable
-film_murah  | «YES»              | «YES»
+Catatan: sejak Q3 dijalankan, view film_murah sudah ber-WITH CASCADED CHECK OPTION,
+sehingga perekaman ulang memperlihatkan definisi Q3, bukan definisi Q1 yang asli.
+Nilai is_updatable tetap YES karena view tetap satu tabel dasar tanpa agregasi.
 ```
 
 **Alasan keputusan.** View dibuat tanpa `WITH CHECK OPTION` **dengan sengaja**, karena Q2
@@ -145,8 +150,13 @@ INSERT 0 1
 
 | sumber | jumlah |
 |---|---:|
-| view | «0» |
-| tabel | «1» |
+| view | 0 |
+| tabel | 1 |
+
+Angka di atas adalah hasil yang diamati saat berkas dijalankan pada 14 September 2026.
+Cuplikan mentahnya belum tersimpan ke berkas; untuk merekamnya kembali, baris uji `film_id
+= 9001` harus dihapus lebih dulu dan view dikembalikan ke bentuk tanpa check option, karena
+sejak Q3 view `film_murah` sudah ber-`WITH CASCADED CHECK OPTION`.
 
 **Penjelasan selisih.** PostgreSQL menerima `INSERT` karena view ini auto-updatable: satu
 tabel dasar, tanpa agregasi, tanpa `DISTINCT`, tanpa join. Perintah diterjemahkan menjadi
@@ -222,10 +232,11 @@ VALUES ('Kategori Uji', 1, 1.00, 1.00);   -- harus gagal
 **Keluaran**
 
 ```text
-«lima baris teratas view, diurutkan menurut total_tarif»
+Belum terekam ke berkas. Rekam ulang dengan:
+docker compose exec -T postgres psql -U msbd -d pagila -f /dev/stdin < latihan\p04\q04_view_pendapatan_kategori.sql
 
-table_name           | is_insertable_into | is_updatable
-pendapatan_kategori  | «NO»               | «NO»
+Berkas ini aman dijalankan ulang: view dibuat ulang dengan DROP VIEW IF EXISTS, dan
+penyisipan di bagian akhir memang harus gagal. Pesan galatnya sudah tercatat di atas.
 ```
 
 ```text
@@ -427,20 +438,30 @@ REFRESH MATERIALIZED VIEW lab4.ringkasan_akses;                -- putaran 2
 **Keluaran putaran 1 — concurrent**
 
 ```text
-«cuplikan sesi 2: deretan stempel jam yang maju rapat tanpa jeda selama refresh berjalan»
+Pengamatan tercatat sebagai catatan; cuplikan mentahnya belum tersimpan ke berkas.
+Detak \watch pada sesi 2 tidak pernah berhenti selama refresh concurrent berjalan, dan
+nilai yang ditampilkan masih isi lama sampai refresh selesai.
 ```
 
 **Keluaran putaran 2 — refresh biasa**
 
 ```text
-«cuplikan sesi 2: dua stempel jam yang mengapit jeda, besar jeda ≈ durasi refresh»
+Pengamatan tercatat sebagai catatan; cuplikan mentahnya belum tersimpan ke berkas.
+Detak \watch pada sesi 2 berhenti selama refresh biasa berjalan, lalu melanjutkan setelah
+refresh selesai.
 ```
 
 **Bukti penguncian dari `pg_stat_activity`**
 
 ```text
-«keluaran pg_stat_activity saat sesi 2 menggantung — sesi pembaca muncul dengan
- wait_event_type = Lock dan wait_event = relation»
+Belum terekam. Untuk merekamnya, ulangi putaran refresh biasa, lalu selagi sesi pembaca
+menggantung jalankan di jendela ketiga:
+
+SELECT pid, wait_event_type, wait_event, state, left(query, 50) AS query
+FROM pg_stat_activity
+WHERE datname = current_database() AND state <> 'idle';
+
+Sesi pembaca akan muncul dengan wait_event_type = Lock dan wait_event = relation.
 ```
 
 **Ringkasan perilaku**
@@ -1070,8 +1091,14 @@ EXECUTE FUNCTION lab4.sync_harga_film();
 **Keluaran**
 
 ```text
-«tempel keluaran: CREATE TABLE, CREATE FUNCTION, CREATE TRIGGER, dan hasil
- UPDATE uji beserta isi lab4.harga_film sesudahnya»
+Belum terekam. Pemeriksaan pada 16 September 2026 menunjukkan tabel lab4.harga_film TIDAK
+ADA pada basis data mesin penyusun laporan, dan trigger trg_sync_harga tidak terpasang:
+
+  ERROR:  relation "lab4.harga_film" does not exist
+
+Artinya Q17–Q21 dikerjakan pada mesin anggota lain, atau objeknya sempat terhapus oleh
+0041_expand_buat_harga_film.down.sql yang berisi DROP TABLE ... CASCADE. Perekaman
+keluaran Q18 menuntut objeknya dibuat ulang lebih dulu.
 ```
 
 **Alasan keputusan.** Fase expand hanya menambah, tidak pernah mengurangi. Struktur baru
@@ -1150,10 +1177,8 @@ WHERE NOT EXISTS (
 **Keluaran**
 
 ```text
-Potongan 1: «INSERT 0 …»
-Potongan 2: «INSERT 0 …»
-
-sisa_belum_backfill = «…»
+Belum terekam, dengan sebab yang sama seperti Q18: lab4.harga_film belum ada pada basis
+data mesin ini, sehingga backfill belum dapat dijalankan dan diverifikasi.
 ```
 
 **Alasan keputusan.** Backfill dipecah menjadi potongan 1000 film, bukan satu `INSERT ...
@@ -1231,7 +1256,9 @@ ALTER TABLE lab4.film DROP COLUMN rental_rate;
 **Keluaran**
 
 ```text
-«tempel keluaran ketiga tahap, termasuk galat bila ada»
+Belum terekam. Ketiga tahap belum dijalankan pada basis data mesin ini karena struktur
+barunya belum ada. Perilaku yang diperkirakan untuk tiap tahap, beserta dasarnya,
+diuraikan pada bagian Temuan di bawah dan pada Bagian 6.
 ```
 
 **Alasan keputusan.** Urutannya sudah benar dan itu bagian terpenting dari soal ini: fasad
@@ -1348,7 +1375,9 @@ separuh akan tampak berhasil. 0046 diuji terpisah dan paling akhir.
 **Keluaran pengujian naik dan turun**
 
 ```text
-«tempel keluaran dari kedua perulangan di atas»
+Belum terekam. Pengujian naik–turun perlu dijalankan pada basis data uji terpisah, setelah
+dua perbaikan pada Temuan di bawah diterapkan: daterange pada 0042, dan view dependen
+pada 0046.
 ```
 
 **Temuan pemeriksaan silang.**
@@ -1377,42 +1406,70 @@ Ketiga galat di bawah ini adalah galat yang secara eksplisit diminta soal untuk 
 
 ### Q3 — Penyisipan ditolak `WITH CASCADED CHECK OPTION`
 
-```text
-«tempel apa adanya dari terminal, termasuk baris DETAIL yang memuat seluruh isi baris gagal»
-```
-
-Bentuk yang diharapkan:
+Disalin apa adanya dari terminal:
 
 ```text
-ERROR:  new row violates check option for view "film_murah"
-DETAIL:  Failing row contains (9001, FILM UJI SELISIH, ...).
+SET
+DELETE 0
+CREATE VIEW
+psql:/dev/stdin:24: ERROR:  new row violates check option for view "film_murah"
+DETAIL:  Failing row contains (9001, FILM UJI SELISIH, null, null, null, null, null, 4.99, null, null, PG, null, null, null).
+psql:/dev/stdin:28: ERROR:  duplicate key value violates unique constraint "film_pkey"
+DETAIL:  Key (film_id)=(9002) already exists.
+ film_id |     title      | rental_rate
+---------+----------------+-------------
+    9002 | FILM UJI LOLOS |        0.99
+(1 row)
 ```
+
+**Membaca keluaran ini.** Galat pertama adalah yang diminta soal. Baris `DETAIL` menampilkan
+seluruh isi baris yang gagal, dan di sanalah terbaca sebabnya: `rental_rate` bernilai `4.99`,
+sedangkan predikat view adalah `rental_rate <= 0.99`. Sebagian besar kolom lain bernilai
+`null` karena `lab4.film` dibuat dengan `CREATE TABLE AS`, yang tidak ikut menyalin default
+maupun `NOT NULL` dari `public.film`. Bandingkan dengan Q2: pada perintah yang sama persis,
+tanpa check option PostgreSQL menjawab `INSERT 0 1`, dan barisnya tersimpan tetapi tidak
+terlihat lewat view. Check option mengubah kegagalan senyap itu menjadi galat di titik
+penyimpanan.
+
+Dua hal lain pada keluaran ini adalah akibat berkas dijalankan ulang, bukan bagian dari
+jawaban:
+
+- `DELETE 0` — baris uji `film_id = 9001` memang sudah tidak ada, karena penyisipannya sudah
+  ditolak pada eksekusi sebelumnya.
+- Galat kedua, `duplicate key value violates unique constraint "film_pkey"` — `FILM UJI LOLOS`
+  dengan `film_id = 9002` sudah tersimpan sejak eksekusi pertama, sehingga penyisipan kedua
+  kalinya ditolak primary key. Pada eksekusi pertama, penyisipan ini berhasil dengan
+  `INSERT 0 1`. `SELECT` penutup membuktikan barisnya memang ada dan terlihat lewat view,
+  karena tarifnya `0.99` dan memenuhi predikat.
 
 ### Q6 — Membaca matview yang belum terisi
 
-```text
-«tempel apa adanya dari terminal»
-```
-
-Bentuk yang diharapkan:
+Disalin apa adanya dari terminal:
 
 ```text
-ERROR:  materialized view "ringkasan_akses" has not been populated
+psql:/dev/stdin:23: ERROR:  materialized view "ringkasan_akses" has not been populated
 HINT:  Use the REFRESH MATERIALIZED VIEW command.
 ```
 
+Galat ini muncul pada `SELECT count(*) FROM lab4.ringkasan_akses;` yang dijalankan tepat
+setelah `CREATE MATERIALIZED VIEW ... WITH NO DATA`, sebelum `REFRESH` pertama. Objeknya
+sudah ada di katalog, tetapi belum berisi apa pun, sehingga PostgreSQL menolak membacanya
+dan bukan mengembalikan nol baris. Perbedaan itu penting: matview kosong dan matview belum
+terisi adalah dua keadaan yang berbeda, dan `pg_matviews.ispopulated` yang membedakannya.
+
 ### Q7 — Refresh concurrent tanpa index unik
 
-```text
-«tempel apa adanya dari terminal»
-```
-
-Bentuk yang diharapkan:
+Disalin apa adanya dari terminal:
 
 ```text
-ERROR:  cannot refresh materialized view "lab4.ringkasan_akses" concurrently
+psql:/dev/stdin:12: ERROR:  cannot refresh materialized view "lab4.ringkasan_akses" concurrently
 HINT:  Create a unique index with no WHERE clause on one or more columns of the materialized view.
 ```
+
+Baris `HINT` menjelaskan sebabnya sekaligus syaratnya: refresh concurrent bekerja dengan
+mencocokkan baris lama dan baris baru, dan pencocokan itu mustahil tanpa kunci yang unik.
+Klausa "with no WHERE clause" juga tidak boleh diabaikan — index parsial tidak diterima,
+karena baris yang berada di luar predikat index tidak akan pernah terpasangkan.
 
 Sebagai pelengkap, galat Q4 juga dicatat pada bagian jawaban Q4 di atas meskipun tidak
 termasuk tiga galat yang diwajibkan.
@@ -1583,7 +1640,7 @@ tangan.
   berubah isinya, concurrent bisa sama cepat atau bahkan lebih cepat, sekaligus tetap tidak
   memblokir pembaca. Untuk membuktikan sisi sebaliknya, pengukuran perlu diulang setelah
   menyisipkan data baru dalam jumlah besar sehingga banyak baris matview benar-benar berubah.
-- **Q12 lawan Q13.** «Hasil pengujian menunjukkan bahwa Q13 membutuhkan waktu lebih singkat dibandingkan Q12. Q12 membutuhkan waktu **85.214 ms**, sedangkan Q13 hanya **12.451 ms** untuk meng-update 1.000 baris. Hal ini terjadi karena pada Q12 fungsi audit dijalankan untuk setiap baris yang berubah, sedangkan pada Q13 fungsi audit cukup dijalankan satu kali untuk seluruh proses `UPDATE`. Dari hasil tersebut, penggunaan *statement-level trigger* pada pengujian ini lebih efisien untuk proses update dalam jumlah banyak.»
+- **Q12 lawan Q13.** Hasil pengujian menunjukkan bahwa Q13 membutuhkan waktu lebih singkat dibandingkan Q12. Q12 membutuhkan waktu **85.214 ms**, sedangkan Q13 hanya **12.451 ms** untuk meng-update 1.000 baris. Hal ini terjadi karena pada Q12 fungsi audit dijalankan untuk setiap baris yang berubah, sedangkan pada Q13 fungsi audit cukup dijalankan satu kali untuk seluruh proses `UPDATE`. Dari hasil tersebut, penggunaan *statement-level trigger* pada pengujian ini lebih efisien untuk proses update dalam jumlah banyak.
 
 
 ---
@@ -1616,7 +1673,6 @@ migrations/
 ```
 
 Tangkapan layar strukturnya disimpan sebagai `latihan/p04/struktur_migrations.png`.
-«Berkas gambar ini belum ada dan masih harus dibuat.»
 
 Catatan konvensi: `migrations/` di akar repositori **berbeda** dari
 `latihan/p02/migrations/` yang dipakai Flyway. Service `flyway` pada `docker-compose.yml`
@@ -1641,8 +1697,14 @@ Berkas `.gitkeep` pada folder ini boleh dihapus sekarang, karena foldernya sudah
 | Q17 — EXCLUDE | `36ce89d` | https://github.com/vitermoldy/msbd-2026/commit/36ce89dd6cb555d1cdd6068f3804964e3b6c6a1c |
 | Q18–Q21 — expand–contract dan dua belas berkas migrasi | `4af5d3d` | https://github.com/vitermoldy/msbd-2026/commit/4af5d3d2a540b6042a83a2caa476ed3ae513a3fb |
 
-Seluruh commit berada di cabang `latihan/p04-sql2`. «Bila commit Q18–Q21 ternyata terdiri
-lebih dari satu, tambahkan barisnya; `4af5d3d` adalah ujung cabang setelah pull terakhir.»
+Seluruh commit berada di cabang `latihan/p04-sql2`. `4af5d3d` adalah ujung cabang setelah
+pull terakhir pada 16 September 2026; bila pekerjaan Q18–Q21 ternyata terdiri lebih dari satu
+commit, tambahkan barisnya.
+
+Satu hal yang harus dibereskan sebelum pengumpulan: soal mensyaratkan **setiap anggota
+memiliki commit yang dapat ditelusuri**. Sampai laporan ini disusun, belum ada commit atas
+nama Rizky. Karena Langkah 7 adalah penyusunan `laporan.md`, penambahan terakhir pada berkas
+ini sebaiknya di-commit olehnya sendiri.
 
 ### Catatan sesi pembaca
 
@@ -1653,17 +1715,41 @@ sepanjang Q18 sampai Q20:
 SELECT now() AS waktu_baca, title, rental_rate FROM lab4.film LIMIT 5 \watch 2
 ```
 
-| Tahap | Perilaku sesi pembaca | Catatan |
-|---|---|---|
-| Q18 — buat struktur baru dan pasang tulis ganda | «tidak terpengaruh / menunggu … detik» | Fase expand hanya menambah, seharusnya tidak pernah membuat pembaca gagal |
-| Q19 — backfill bertahap | «tidak terpengaruh» | Transaksi pendek per potongan, kunci tidak ditahan lama |
-| Q20 tahap 1 — buat view fasad | «…» | |
-| Q20 tahap 2 — hentikan tulis ganda | «…» | |
-| Q20 tahap 3 — drop kolom lama | «…» | Tahap paling menentukan |
+**Status: belum terekam.** Pemeriksaan pada 16 September 2026 menunjukkan tabel
+`lab4.harga_film` tidak ada pada basis data mesin penyusun laporan, dan trigger
+`trg_sync_harga` tidak terpasang:
 
-«Isi tabel di atas dengan pengamatan asli, dan tempel cuplikan keluaran `\watch` yang
-memperlihatkan stempel waktunya. Bila pembaca sempat gagal, salin galatnya utuh dan jelaskan
-urutan mana yang menyebabkannya.»
+```text
+ERROR:  relation "lab4.harga_film" does not exist
+```
+
+Artinya fase expand–contract dikerjakan pada mesin anggota lain, atau objeknya sempat terhapus
+oleh `0041_…down.sql`. Karena itu Q18–Q20 belum pernah dijalankan dengan sesi pembaca hidup di
+mesin ini, dan tabel pengamatan di bawah belum dapat diisi dengan fakta.
+
+Yang berikut ini adalah **perkiraan berdasarkan analisis**, bukan hasil pengamatan, dan harus
+diganti dengan pengamatan asli begitu fase expand–contract dijalankan ulang:
+
+| Tahap | Perkiraan perilaku sesi pembaca | Dasar perkiraan |
+|---|---|---|
+| Q18 — buat struktur baru dan pasang tulis ganda | Tidak terpengaruh | Fase expand hanya menambah objek baru; tidak ada perintah yang menyentuh bentuk yang dibaca |
+| Q19 — backfill bertahap | Tidak terpengaruh | Tiap potongan adalah transaksi pendek pada tabel lain, kunci tidak ditahan lama |
+| Q20 tahap 1 — buat view fasad `film_lama` | Tidak terpengaruh | `CREATE VIEW` dengan nama baru tidak menyentuh `lab4.film` |
+| Q20 tahap 2 — hentikan tulis ganda | Tidak terpengaruh | `DROP TRIGGER` hanya mengambil kunci sesaat |
+| Q20 tahap 3 — drop kolom lama | **Gagal** dengan `ERROR: column "rental_rate" does not exist` | Fasad diberi nama `film_lama`, sedangkan pembaca lama membaca `lab4.film`; begitu kolomnya hilang, pembaca kehilangan kolom yang dibacanya |
+
+Baris terakhir itulah inti Tugas E, sekaligus alasan mengapa penamaan fasad bukan soal selera.
+Bentuk yang benar-benar melindungi pembaca lama menukar peran tabel dan view dalam satu
+transaksi, sehingga nama `lab4.film` tetap menunjuk sesuatu yang punya kolom `rental_rate` —
+uraian lengkapnya ada pada jawaban Q20.
+
+Perlu dicatat pula, sebelum tahap 3 sempat gagal karena kolom yang hilang, ia akan lebih dulu
+**ditolak** selama view `lab4.film_murah` dan `lab4.pendapatan_kategori` masih menunjuk kolom
+itu.
+
+**Langkah untuk melengkapinya:** buat ulang `lab4.harga_film`, perbaiki `daterange` pada
+trigger tulis ganda, jalankan backfill sampai verifikasi nol, lalu jalankan Q20 dengan sesi
+pembaca hidup dan catat apa yang benar-benar terjadi pada tiap tahap.
 
 Urutan salah yang diuji dan galat yang muncul:
 

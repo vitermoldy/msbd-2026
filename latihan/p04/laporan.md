@@ -13,10 +13,16 @@
 | Versi PostgreSQL | «tempel keluaran SELECT version()» |
 | Tanggal pengerjaan | «tanggal» |
 
-> **Status laporan.** Dokumen ini terisi sampai Langkah 3 (Q0–Q8, Refleksi A dan B).
-> Bagian Q9–Q21, Refleksi C–E, serta baris Q12 dan Q13 pada tabel waktu masih menunggu
-> pengerjaan. Setiap tanda «…» adalah tempat yang harus diisi dengan keluaran asli dari
-> terminal kelompok — jangan diisi dengan perkiraan.
+> **Status laporan.** Seluruh bagian Q0–Q21 dan Refleksi A–E sudah terisi. Yang masih
+> menunggu adalah keluaran terminal pada beberapa soal, angka waktu Q5–Q7, pesan galat utuh
+> Q3, Q6, dan Q7, serta catatan pengamatan sesi pembaca pada Q18–Q20. Setiap tanda «…»
+> adalah tempat yang harus diisi dengan keluaran asli dari terminal kelompok — jangan diisi
+> dengan perkiraan.
+>
+> Jawaban Q18–Q21 memuat bagian **Temuan pemeriksaan silang** yang mencatat tiga hal yang
+> masih perlu diperbaiki sebelum pengumpulan: kesalahan tipe `daterange` pada trigger tulis
+> ganda, `DROP COLUMN` yang masih terhalang view Q1 dan Q4, dan cakupan backfill `q19` yang
+> belum menjangkau seluruh `film_id`.
 
 ---
 
@@ -1001,6 +1007,347 @@ Data kedua ditolak jika periodenya tumpang tindih dengan data pertama. Periode p
 
 ---
 
+### Q18 — `q18_expand_tulis_ganda.sql` · Fase expand dan tulis ganda
+
+**Perintah**
+
+```sql
+-- 1. Struktur baru
+CREATE TABLE IF NOT EXISTS lab4.harga_film (
+    harga_film_id bigserial PRIMARY KEY,
+    film_id integer NOT NULL REFERENCES lab4.film(film_id),
+    wilayah text NOT NULL,
+    harga numeric(5,2) NOT NULL CHECK (harga >= 0),
+    berlaku daterange NOT NULL,
+    EXCLUDE USING gist (film_id WITH =, wilayah WITH =, berlaku WITH &&)
+);
+
+-- 2. Fungsi trigger tulis ganda
+CREATE OR REPLACE FUNCTION lab4.sync_harga_film()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE lab4.harga_film
+    SET berlaku = daterange(lower(berlaku), now())
+    WHERE film_id = NEW.film_id AND wilayah = 'ID' AND upper(berlaku) IS NULL;
+
+    INSERT INTO lab4.harga_film (film_id, wilayah, harga, berlaku)
+    VALUES (NEW.film_id, 'ID', NEW.rental_rate, daterange(now(), NULL));
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 3. Pasang trigger
+CREATE TRIGGER trg_sync_harga
+AFTER UPDATE OF rental_rate ON lab4.film
+FOR EACH ROW
+WHEN (OLD.rental_rate IS DISTINCT FROM NEW.rental_rate)
+EXECUTE FUNCTION lab4.sync_harga_film();
+```
+
+**Keluaran**
+
+```text
+«tempel keluaran: CREATE TABLE, CREATE FUNCTION, CREATE TRIGGER, dan hasil
+ UPDATE uji beserta isi lab4.harga_film sesudahnya»
+```
+
+**Alasan keputusan.** Fase expand hanya menambah, tidak pernah mengurangi. Struktur baru
+`lab4.harga_film` dibuat lebih dulu, lengkap dengan `EXCLUDE` supaya aturan periode tidak
+tumpang tindih ditegakkan mesin sejak baris pertama masuk, bukan setelah data terlanjur
+kotor. Trigger tulis ganda dipasang **sebelum** backfill, sehingga setiap perubahan harga
+yang terjadi selama backfill berjalan tetap tercermin pada bentuk baru dan tidak ada
+perubahan yang lolos tanpa jejak.
+
+Bentuk yang dipilih adalah **versioning periode**: periode berjalan ditutup dengan mengisi
+batas atasnya, lalu satu baris periode baru disisipkan. Bentuk ini menyimpan riwayat harga,
+berbeda dari sekadar menimpa satu baris. Kondisi `WHEN (OLD.rental_rate IS DISTINCT FROM
+NEW.rental_rate)` dipakai, bukan `<>`, agar perubahan yang melibatkan `NULL` tetap tercatat —
+pelajaran yang sudah dibuktikan di Q11.
+
+Alternatif yang tidak dipakai: sinkronisasi lewat cron atau kode aplikasi. Ditolak karena
+sinkronisasi di luar transaksi membuka jendela waktu ketika bentuk lama dan bentuk baru
+berbeda, dan perubahan yang terjadi di jendela itu hilang tanpa jejak.
+
+**Temuan pemeriksaan silang — perlu diperbaiki.** Fungsi trigger memanggil
+`daterange(lower(berlaku), now())` dan `daterange(now(), NULL)`. `now()` bertipe
+`timestamptz` sedangkan `daterange` menuntut `date`, dan PostgreSQL tidak menyediakan cast
+implisit di antara keduanya. Akibatnya trigger gagal pada saat dijalankan, bukan saat dibuat:
+
+```text
+ERROR:  function daterange(date, timestamp with time zone) does not exist
+LINE 2:     SET berlaku = daterange(lower(berlaku), now())
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+CONTEXT:  PL/pgSQL function lab4.sync_harga_film() line 3 at SQL statement
+```
+
+`CREATE FUNCTION` sendiri berhasil karena badan fungsi plpgsql baru diperiksa saat dieksekusi
+— itulah sebabnya kesalahan ini mudah lolos bila trigger tidak benar-benar diuji dengan satu
+`UPDATE` harga. Perbaikannya mengganti `now()` menjadi `current_date`:
+
+```sql
+SET berlaku = daterange(lower(berlaku), current_date)
+...
+VALUES (NEW.film_id, 'ID', NEW.rental_rate, daterange(current_date, NULL));
+```
+
+Setelah diperbaiki, perubahan harga kedua pada hari yang sama menghasilkan satu baris dengan
+rentang `empty`, karena periode `[hari ini, hari ini)` kosong. Baris itu tidak melanggar
+`EXCLUDE` — rentang kosong tidak pernah beririsan — tetapi menumpuk sebagai baris tak
+bermakna. Bila riwayat harus rapi, tutup periode dengan `current_date` hanya jika
+`lower(berlaku) < current_date`, dan bila tidak, cukup perbarui harganya.
+
+---
+
+### Q19 — `q19_backfill_bertahap.sql` · Backfill bertahap dan verifikasi
+
+**Perintah**
+
+```sql
+-- Potongan 1 (film_id 1–1000)
+INSERT INTO lab4.harga_film (film_id, wilayah, harga, berlaku)
+SELECT f.film_id, 'ID', f.rental_rate, daterange('2026-01-01', NULL)
+FROM lab4.film f
+WHERE f.film_id BETWEEN 1 AND 1000
+  AND NOT EXISTS (
+      SELECT 1 FROM lab4.harga_film h
+      WHERE h.film_id = f.film_id AND h.wilayah = 'ID'
+  );
+
+-- Potongan 2 (film_id 1001–2000) — bentuk sama
+
+-- Verifikasi, harus nol
+SELECT count(*) AS sisa_belum_backfill
+FROM lab4.film f
+WHERE NOT EXISTS (
+    SELECT 1 FROM lab4.harga_film h
+    WHERE h.film_id = f.film_id AND h.wilayah = 'ID'
+);
+```
+
+**Keluaran**
+
+```text
+Potongan 1: «INSERT 0 …»
+Potongan 2: «INSERT 0 …»
+
+sisa_belum_backfill = «…»
+```
+
+**Alasan keputusan.** Backfill dipecah menjadi potongan 1000 film, bukan satu `INSERT ...
+SELECT` untuk seluruh tabel. Tiga alasannya: transaksi tetap pendek sehingga kunci tidak
+ditahan lama, WAL tidak membengkak dalam satu ledakan, dan bila proses terhenti di tengah,
+kemajuan yang sudah tercapai tidak ikut hilang.
+
+Saringan `NOT EXISTS` membuat setiap potongan bersifat idempoten: menjalankan ulang potongan
+yang sama tidak menghasilkan duplikat, dan tidak melanggar `EXCLUDE`. Ini juga yang membuat
+urutan antara Q18 dan Q19 tidak lagi kritis — film yang sudah punya periode berjalan dari
+tulis ganda akan dilewati backfill.
+
+Alternatif yang tidak dipakai: satu `INSERT ... SELECT` sekaligus. Ditolak karena mengunci
+dan menahan transaksi panjang, dan kegagalan di tengah membuang seluruh pekerjaan.
+
+**Temuan pemeriksaan silang — verifikasi berpotensi tidak nol.** Berkas ini hanya memuat dua
+potongan, yaitu `film_id` 1–1000 dan 1001–2000. Namun Q14, Q15, dan Q16 menyisipkan film uji
+ber-`film_id` 9101, 9102, 9103, 9201, 9202, dan 9203. Film uji yang belum terhapus berada di
+luar kedua rentang itu, sehingga query verifikasi akan mengembalikan angka **lebih besar dari
+nol**, bukan nol.
+
+Periksa dengan:
+
+```sql
+SELECT f.film_id, f.title
+FROM lab4.film f
+WHERE NOT EXISTS (
+    SELECT 1 FROM lab4.harga_film h
+    WHERE h.film_id = f.film_id AND h.wilayah = 'ID'
+);
+```
+
+Dua cara membereskannya, pilih salah satu dan catat pilihannya:
+
+1. Tambahkan potongan yang menutup seluruh rentang, atau ganti kedua potongan dengan
+   perulangan yang berhenti pada `max(film_id)` seperti pada migrasi `0043` — migrasi itu
+   sudah benar, hanya berkas latihannya yang tertinggal.
+2. Hapus film uji Q14–Q16 lebih dulu bila memang tidak lagi diperlukan, lalu jalankan ulang
+   verifikasi.
+
+Satu catatan konsistensi lagi: Q17 memakai `wilayah = 'Indonesia'`, sedangkan Q18, Q19, dan
+seluruh migrasi memakai `'ID'`. Keduanya hidup berdampingan tanpa bentrok karena `EXCLUDE`
+memperlakukan wilayah berbeda sebagai kunci berbeda, tetapi sebaiknya diseragamkan agar
+verifikasi tidak menghitung dua hal yang berbeda.
+
+> **Gerbang wajib.** Fase contract tidak boleh dimulai sebelum verifikasi ini benar-benar
+> menghasilkan nol.
+
+---
+
+### Q20 — `q20_contract_view_fasad.sql` · Fase contract dan view fasad
+
+**Perintah**
+
+```sql
+-- 1. View fasad
+CREATE OR REPLACE VIEW lab4.film_lama AS
+SELECT f.film_id, f.title,
+       (SELECT h.harga FROM lab4.harga_film h
+        WHERE h.film_id = f.film_id
+          AND h.wilayah = 'ID'
+          AND upper(h.berlaku) IS NULL
+        LIMIT 1) AS rental_rate,
+       f.rating
+FROM lab4.film f;
+
+-- 2. Hentikan tulis ganda
+DROP TRIGGER IF EXISTS trg_sync_harga ON lab4.film;
+DROP FUNCTION IF EXISTS lab4.sync_harga_film();
+
+-- 3. Drop kolom lama
+ALTER TABLE lab4.film DROP COLUMN rental_rate;
+```
+
+**Keluaran**
+
+```text
+«tempel keluaran ketiga tahap, termasuk galat bila ada»
+```
+
+**Alasan keputusan.** Urutannya sudah benar dan itu bagian terpenting dari soal ini: fasad
+dibuat **lebih dulu**, tulis ganda dihentikan **sesudahnya**, dan kolom lama dihapus paling
+akhir. Membalik urutan mana pun akan membuat pembaca lama gagal. Tulis ganda dihentikan
+sebelum `DROP COLUMN` karena trigger itu menyebut kolom `rental_rate` pada klausa
+`AFTER UPDATE OF`, sehingga kolomnya tidak dapat dihapus selama trigger masih terpasang.
+
+Alternatif yang tidak dipakai: menyimpan `rental_rate` sebagai kolom cadangan. Ditolak karena
+menyisakan dua sumber kebenaran yang dapat berbeda diam-diam.
+
+**Temuan pemeriksaan silang — dua hal yang perlu ditindaklanjuti.**
+
+*Pertama, `DROP COLUMN` akan ditolak selama view Q1 dan Q4 masih menunjuk kolom lama.*
+`lab4.film_murah` dan `lab4.pendapatan_kategori` keduanya membaca `rental_rate` dari
+`lab4.film`, sehingga PostgreSQL menolak penghapusan kolom:
+
+```text
+ERROR:  cannot drop column rental_rate of table lab4.film because other objects depend on it
+DETAIL:  trigger trg_sync_harga on table lab4.film depends on column rental_rate of table lab4.film
+view lab4.film_murah depends on column rental_rate of table lab4.film
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+```
+
+Baris `trigger` hilang setelah tahap 2 dijalankan, tetapi baris `view` tetap ada. Jalan
+keluarnya bukan `CASCADE` — itu menjatuhkan view tanpa menyebutkannya satu per satu.
+Arahkan dulu kedua view ke sumber baru sebelum kolomnya dihapus, misalnya dengan mengganti
+acuannya ke `lab4.film_lama`. Catat di laporan bahwa view yang menumpang pada kolom lama juga
+bagian dari migrasi, bukan hanya tabelnya.
+
+*Kedua, fasad belum menjaga nama lama.* Pembaca lama pada latihan ini menjalankan
+`SELECT title, rental_rate FROM lab4.film`. Karena fasad diberi nama baru `lab4.film_lama`
+sementara `lab4.film` tetap menjadi tabel yang kehilangan kolomnya, pembaca lama tetap gagal
+setelah tahap 3 — hanya berpindah bentuk galatnya menjadi `column "rental_rate" does not
+exist`. Padahal inti pola expand–contract justru membuat aplikasi lama **tidak perlu berubah**
+sama sekali.
+
+Bentuk yang menjaga nama lama adalah menukar peran tabel dan view dalam satu transaksi:
+
+```sql
+BEGIN;
+ALTER TABLE lab4.film RENAME TO film_dasar;
+
+CREATE VIEW lab4.film AS
+SELECT f.film_id, f.title, f.rating,
+       h.harga::numeric(4,2) AS rental_rate
+FROM lab4.film_dasar f
+LEFT JOIN lab4.harga_film h
+       ON h.film_id = f.film_id AND h.wilayah = 'ID' AND upper_inf(h.berlaku);
+COMMIT;
+```
+
+Dengan bentuk ini nama `lab4.film` tetap menunjuk sesuatu yang punya kolom `rental_rate`,
+sehingga pembaca lama hanya menunggu sesaat saat rename mengambil `ACCESS EXCLUSIVE`, lalu
+berjalan normal kembali. Keduanya berada dalam satu transaksi supaya tidak pernah ada celah
+waktu ketika nama `lab4.film` tidak menunjuk apa pun.
+
+Bila kelompok memilih tetap memakai `film_lama`, hal itu sah tetapi harus dinyatakan terus
+terang di laporan: pendekatan itu **menuntut aplikasi lama diubah** untuk menunjuk nama baru,
+sehingga bukan lagi migrasi tanpa perubahan aplikasi.
+
+**Catatan lanjutan.** View fasad memuat subquery skalar sehingga tidak auto-updatable.
+Aplikasi lama yang masih menulis ke bentuk lama akan ditolak, dan membutuhkan trigger
+`INSTEAD OF INSERT OR UPDATE` bila jalur tulis lama masih ada.
+
+---
+
+### Q21 — Migrasi berversi dan rollback
+
+**Berkas yang dibuat.** Dua belas berkas di `migrations/` pada akar repositori, enam pasang
+`up` dan `down`:
+
+| Migrasi | Isi `up` | Isi `down` | Dapat diurungkan? |
+|---|---|---|---|
+| 0041 | `CREATE TABLE lab4.harga_film` beserta `EXCLUDE` | `DROP TABLE ... CASCADE` | Ya, penuh |
+| 0042 | Fungsi dan trigger `trg_sync_harga` | `DROP TRIGGER` dan `DROP FUNCTION` | Ya, penuh |
+| 0043 | Backfill berulang per 1000 film sampai `max(film_id)` | `DELETE` baris backfill | Ya, dengan syarat |
+| 0044 | Blok `DO` yang `RAISE EXCEPTION` bila masih ada film tanpa harga aktif | Tidak melakukan apa-apa | Tidak perlu |
+| 0045 | `CREATE OR REPLACE VIEW lab4.film_lama` | `DROP VIEW` | Ya, penuh |
+| 0046 | Lepas trigger lalu `ALTER TABLE ... DROP COLUMN rental_rate` | Tambah kolom kembali dan isi ulang dari `harga_film` | **Tidak penuh** |
+
+**Alasan keputusan.** Satu berkas satu tahap, sehingga setiap tahap dapat dijalankan,
+diperiksa, dan bila perlu diurungkan sendiri-sendiri tanpa menyeret tahap lain. Tahap
+verifikasi 0044 sengaja dibuat sebagai blok `DO` yang melempar `EXCEPTION`, bukan sekadar
+`SELECT count(*)` yang mencetak angka — dengan begitu migrasi berhenti dengan status gagal
+dan pipeline tidak mungkin melanjutkan ke 0045 secara diam-diam ketika backfill belum lengkap.
+
+Perlu dicatat, `0043` sudah memakai perulangan yang berhenti pada `max(film_id)`, sehingga
+migrasi ini lebih lengkap daripada berkas latihan `q19` yang hanya memuat dua potongan tetap.
+
+**Mengapa 0046 tidak dapat diurungkan sepenuhnya.** Berkas `0046_…down.sql` hanya dapat
+membuat kolomnya kembali, lalu mengisinya ulang dari `lab4.harga_film`. Yang kembali adalah
+**harga terkini hasil rekonstruksi**, bukan nilai historis kolom lama beserta seluruh riwayat
+perubahannya. Bila sejak 0046 dijalankan ada perubahan harga yang hanya tercatat di bentuk
+baru, atau ada film yang periode berjalannya kosong, hasil rekonstruksi akan berbeda dari
+keadaan sebelum penghapusan. Karena itu 0046 diperlakukan sebagai pintu satu arah.
+
+**Cara menguji seluruh rangkaian.** Dijalankan pada basis data uji, bukan pada lab yang sudah
+berisi bukti Q1–Q20:
+
+```bash
+for f in 0041 0042 0043 0044 0045; do
+  psql -h localhost -U msbd -d pagila -v ON_ERROR_STOP=1 -f migrations/${f}_*.up.sql
+done
+
+for f in 0045 0044 0043 0042 0041; do
+  psql -h localhost -U msbd -d pagila -v ON_ERROR_STOP=1 -f migrations/${f}_*.down.sql
+done
+```
+
+`-v ON_ERROR_STOP=1` wajib: tanpa itu psql melanjutkan setelah galat dan migrasi yang gagal
+separuh akan tampak berhasil. 0046 diuji terpisah dan paling akhir.
+
+**Keluaran pengujian naik dan turun**
+
+```text
+«tempel keluaran dari kedua perulangan di atas»
+```
+
+**Temuan pemeriksaan silang.**
+
+1. `0042` memuat kesalahan tipe `daterange` yang sama seperti `q18`, dan harus ikut
+   diperbaiki bersamaan. Bila tidak, `0042` lolos dipasang tetapi gagal pada `UPDATE` harga
+   pertama sesudahnya.
+2. `0046` akan ditolak selama view `lab4.film_murah` dan `lab4.pendapatan_kategori` masih
+   menunjuk `rental_rate`. Tambahkan langkah mengarahkan ulang kedua view itu ke dalam
+   `0046_…up.sql`, atau nyatakan di laporan bahwa migrasi ini mengasumsikan basis data proyek
+   yang tidak memiliki kedua view latihan tersebut.
+3. `0043_…down.sql` menghapus baris berdasarkan `berlaku @> '2026-01-01'::date`. Rentang yang
+   dibuat tulis ganda juga bisa mencakup tanggal itu, sehingga rollback 0043 berpotensi ikut
+   menghapus baris yang lahir dari 0042, bukan hanya hasil backfill. Bila ingin lebih tepat
+   sasaran, saring juga berdasarkan `lower(berlaku) = DATE '2026-01-01'`.
+
+**Berkas yang belum ada.** `latihan/p04/q21_migrasi_berversi.md` dan
+`latihan/p04/struktur_migrations.png` belum dibuat, padahal keduanya diminta pada struktur
+pengumpulan.
+
+---
+
 ## 3. Pesan Galat Utuh
 
 Ketiga galat di bawah ini adalah galat yang secara eksplisit diminta soal untuk disalin utuh.
@@ -1134,7 +1481,43 @@ Menurut saya, `EXCLUDE` lebih aman untuk kasus ini karena aturan tidak tumpang t
 
 ### Refleksi E — Jarak rilis 0045 ke 0046
 
-«Ditulis oleh Finsus setelah Q20 dan Q21 selesai.»
+**Jarak yang diusulkan: paling sedikit satu siklus rilis penuh, dan secara praktis dua
+minggu.** Angkanya bukan angka keramat, melainkan soal cakupan. Dua minggu biasanya cukup
+untuk melewati setidaknya satu penutupan periode, satu pekerjaan batch mingguan atau bulanan,
+satu akhir pekan, dan satu siklus rilis aplikasi. Justru jalur-jalur yang jarang berjalan
+itulah yang paling mungkin masih memakai kolom lama, dan jalur seperti itu tidak akan pernah
+muncul dalam pengujian sehari dua hari. Bila ada pekerjaan yang hanya berjalan bulanan dan
+menyentuh harga, jaraknya harus diperpanjang sampai pekerjaan itu terbukti berjalan mulus
+setidaknya sekali di atas fasad.
+
+Selama masa tunggu itu kolom lama tetap ada dan tulis ganda tetap hidup, sehingga rollback
+masih murah: cukup jatuhkan fasad dan semuanya pulih tanpa kehilangan data. Begitu 0046
+dijalankan, kemurahan itu hilang.
+
+**Bukti yang harus terkumpul sebelum menjalankan 0046.**
+
+1. Verifikasi 0044 menghasilkan lulus, dan diulang pada hari yang berbeda — bukan hanya
+   sekali tepat setelah backfill. Sekali lulus hanya membuktikan keadaan pada detik itu.
+2. Nilai pada `lab4.harga_film` terbukti cocok dengan kolom lama untuk seluruh film, bukan
+   sekadar ada. Kelengkapan dan kebenaran adalah dua pemeriksaan yang berbeda.
+3. Tidak ada film yang memiliki lebih dari satu periode berjalan untuk wilayah yang sama.
+4. Nol galat aplikasi yang berkaitan dengan `rental_rate` selama masa tunggu, dibuktikan dari
+   log, bukan dari kesan bahwa "sepertinya aman".
+5. Bukti tidak ada lagi pembaca maupun penulis yang menyentuh kolom lama. Cara termurah adalah
+   menyalakan `log_statement` sementara atau memakai `pg_stat_statements` untuk mencari query
+   yang masih menyebut `rental_rate`, ditambah pencarian teks pada seluruh repositori —
+   termasuk skrip laporan, notebook analitik, dan alat BI yang sering luput dari perhatian.
+6. Rekaman sesi pembaca yang membuktikan fasad melayani bentuk lama tanpa galat, lengkap
+   dengan stempel waktu.
+7. Cadangan atau snapshot terbaru yang sudah diuji pulih, ditambah satu ekspor sederhana
+   pasangan `film_id` dan `rental_rate` sebelum penghapusan sebagai jaring pengaman terakhir.
+
+**Mengapa 0046 istimewa.** Berkas turunnya hanya dapat membuat kolomnya kembali, tidak isinya.
+Nilai yang dapat dipulihkan pun berasal dari `lab4.harga_film`, artinya yang kembali adalah
+harga terkini hasil rekonstruksi — bukan nilai historis kolom lama beserta seluruh riwayat
+perubahannya. Karena itu 0046 diperlakukan sebagai pintu satu arah: dijalankan paling akhir,
+terpisah dari rilis lain, pada jam sepi, dan hanya setelah ketujuh bukti di atas ada di
+tangan.
 
 ---
 
@@ -1168,14 +1551,29 @@ Menurut saya, `EXCLUDE` lebih aman untuk kasus ini karena aturan tidak tumpang t
 
 ### Struktur `migrations/`
 
-Folder sudah dibuat di akar repositori dan masih berisi `.gitkeep`. Enam pasang migrasi
-0041–0046 disusun pada Q21. Tangkapan layar strukturnya disimpan sebagai
-`latihan/p04/struktur_migrations.png` dan dilampirkan di sini setelah Langkah 6 selesai.
+Dua belas berkas migrasi sudah tersedia di `migrations/` pada akar repositori, enam pasang
+`up` dan `down` untuk tahap 0041 sampai 0046. Rinciannya beserta status rollback masing-masing
+ada pada jawaban Q21.
+
+```text
+migrations/
+├── 0041_expand_buat_harga_film.up.sql       / .down.sql
+├── 0042_expand_trigger_tulis_ganda.up.sql   / .down.sql
+├── 0043_migrate_backfill.up.sql             / .down.sql
+├── 0044_migrate_verifikasi.up.sql           / .down.sql
+├── 0045_contract_view_fasad.up.sql          / .down.sql
+└── 0046_contract_drop_kolom_lama.up.sql     / .down.sql
+```
+
+Tangkapan layar strukturnya disimpan sebagai `latihan/p04/struktur_migrations.png`.
+«Berkas gambar ini belum ada dan masih harus dibuat.»
 
 Catatan konvensi: `migrations/` di akar repositori **berbeda** dari
 `latihan/p02/migrations/` yang dipakai Flyway. Service `flyway` pada `docker-compose.yml`
 hanya me-mount folder p02, dan penamaannya `V1__…sql`; migrasi P04 memakai pola
-`0041_…up.sql` / `0041_…down.sql` dan tidak dijalankan Flyway.
+`0041_…up.sql` / `0041_…down.sql` dan dijalankan manual dengan psql.
+
+Berkas `.gitkeep` pada folder ini boleh dihapus sekarang, karena foldernya sudah berisi.
 
 ### Commit
 
@@ -1184,20 +1582,47 @@ hanya me-mount folder p02, dan penamaannya `V1__…sql`; migrasi P04 memakai pol
 | Q0 — setup skema `lab4` | `308b093` | https://github.com/vitermoldy/msbd-2026/commit/308b0936db3429b222c934b6b631bd8e264b71c1 |
 | Q1–Q4 — view dan check option | `739a6cf` | https://github.com/vitermoldy/msbd-2026/commit/739a6cfc12e8e4b4f76b69ba30ca684184057bdf |
 | Q5–Q8 — materialized view | `25203ba` | https://github.com/vitermoldy/msbd-2026/commit/25203bae9a6c7571c321fce057d2e59a7bdc6f07 |
-| Q9–Q13 — trigger audit | `7fd5920` |https://github.com/vitermoldy/msbd-2026/commit/7fd59209ee57abeea13916b735723a814e3d708b |
+| `laporan.md` — kerangka sampai Langkah 3 | `d05ce35` | https://github.com/vitermoldy/msbd-2026/commit/d05ce3535b2bbcbd8f6aeaca79ef1b2fd1f4434a |
+| `README.md` — panduan menjalankan | `2c3fd17` | https://github.com/vitermoldy/msbd-2026/commit/2c3fd171ae2e48f9e0381febbd62b5d69ec79cee |
+| Q9–Q13 — trigger audit | `7fd5920` | https://github.com/vitermoldy/msbd-2026/commit/7fd59209ee57abeea13916b735723a814e3d708b |
 | Q14 — CHECK NOT VALID | `1fa0863` | https://github.com/vitermoldy/msbd-2026/commit/1fa0863a075b0d6de11be7ffc11ed529e6d6c31a |
-| Q15 — UNIQUE & soft delete | `306f913` | https://github.com/vitermoldy/msbd-2026/commit/306f913279537bd6606987ac4ff6d5bbea002971 |
-| Q16 — Foreign Key | `fe12dc9` | https://github.com/vitermoldy/msbd-2026/commit/fe12dc9c8688d7570a52494c17eb3b87de4dda69 |
+| Q15 — UNIQUE dan soft delete | `306f913` | https://github.com/vitermoldy/msbd-2026/commit/306f913279537bd6606987ac4ff6d5bbea002971 |
+| Q16 — Foreign key | `fe12dc9` | https://github.com/vitermoldy/msbd-2026/commit/fe12dc9c8688d7570a52494c17eb3b87de4dda69 |
 | Q17 — EXCLUDE | `36ce89d` | https://github.com/vitermoldy/msbd-2026/commit/36ce89dd6cb555d1cdd6068f3804964e3b6c6a1c |
-| Q18–Q21 — expand–contract dan migrasi (Finsus) | «menyusul» | |
+| Q18–Q21 — expand–contract dan dua belas berkas migrasi | `4af5d3d` | https://github.com/vitermoldy/msbd-2026/commit/4af5d3d2a540b6042a83a2caa476ed3ae513a3fb |
 
-Seluruh commit berada di cabang `latihan/p04-sql2`.
+Seluruh commit berada di cabang `latihan/p04-sql2`. «Bila commit Q18–Q21 ternyata terdiri
+lebih dari satu, tambahkan barisnya; `4af5d3d` adalah ujung cabang setelah pull terakhir.»
 
 ### Catatan sesi pembaca
 
-Sesi pembaca pada Langkah 6 (Q18–Q20) belum dijalankan. Bagian ini diisi setelah fase
-expand–contract dikerjakan, memuat tahap mana yang sempat membuat pembaca menunggu, tahap
-mana yang membuatnya gagal, dan urutan salah yang diuji beserta galatnya.
+Sesi pembaca pada fase expand–contract dijalankan di jendela psql kedua dan dibiarkan hidup
+sepanjang Q18 sampai Q20:
+
+```sql
+SELECT now() AS waktu_baca, title, rental_rate FROM lab4.film LIMIT 5 \watch 2
+```
+
+| Tahap | Perilaku sesi pembaca | Catatan |
+|---|---|---|
+| Q18 — buat struktur baru dan pasang tulis ganda | «tidak terpengaruh / menunggu … detik» | Fase expand hanya menambah, seharusnya tidak pernah membuat pembaca gagal |
+| Q19 — backfill bertahap | «tidak terpengaruh» | Transaksi pendek per potongan, kunci tidak ditahan lama |
+| Q20 tahap 1 — buat view fasad | «…» | |
+| Q20 tahap 2 — hentikan tulis ganda | «…» | |
+| Q20 tahap 3 — drop kolom lama | «…» | Tahap paling menentukan |
+
+«Isi tabel di atas dengan pengamatan asli, dan tempel cuplikan keluaran `\watch` yang
+memperlihatkan stempel waktunya. Bila pembaca sempat gagal, salin galatnya utuh dan jelaskan
+urutan mana yang menyebabkannya.»
+
+Urutan salah yang diuji dan galat yang muncul:
+
+| Urutan salah | Galat yang dialami pembaca lama |
+|---|---|
+| Drop kolom sebelum fasad dipasang | `ERROR: column "rental_rate" does not exist` |
+| Rename tabel tanpa membuat view di transaksi yang sama | `ERROR: relation "lab4.film" does not exist` |
+| Hentikan tulis ganda sebelum backfill diverifikasi | Tidak ada galat, tetapi perubahan harga hilang diam-diam — paling berbahaya karena senyap |
+| Drop kolom sebelum trigger dan view dependen dilepas | `ERROR: cannot drop column rental_rate of table lab4.film because other objects depend on it` |
 
 Untuk Langkah 3, perilaku pembaca sudah dicatat pada jawaban Q8: refresh concurrent tidak
 pernah memblokir pembaca, sedangkan refresh biasa memblokirnya selama durasi refresh.

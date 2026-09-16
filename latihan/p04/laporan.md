@@ -477,10 +477,9 @@ CREATE FUNCTION
 DROP TRIGGER
 CREATE TRIGGER
 ```
-**Alasan keputusan.** Klausa `AFTER UPDATE OF rental_rate` digunakan untuk menghindari
-*overhead* eksekusi yang tidak perlu ketika terjadi perubahan pada kolom selain harga sewa.
-Selain itu, penggunaan operator `IS DISTINCT FROM` diterapkan untuk menjamin perbandingan nilai
-lama dan nilai baru tetap konsisten serta aman dari potensi masalah nilai `NULL` (*NULL-safe*).
+**Alasan keputusan** 
+
+Klausa `AFTER UPDATE OF rental_rate` digunakan agar trigger hanya dijalankan ketika kolom harga sewa mengalami perubahan, sehingga eksekusi yang tidak diperlukan pada perubahan kolom lain dapat dihindari. Selain itu, operator `IS DISTINCT FROM` digunakan untuk membandingkan nilai lama dan nilai baru dengan aman, termasuk ketika salah satu nilainya adalah `NULL`.
 
 ### Q10 — `q10_uji_audit_baris.sql` · Pengujian Trigger Audit Baris
 
@@ -513,12 +512,162 @@ UPDATE 1
         1 |       1 |       0.99 |       9.99 | msbd
 (1 row)
 ```
-**Alasan keputusan.** Pengujian ini dilakukan untuk memverifikasi efektivitas filter kondisi
-pada *trigger* secara langsung:
-* **Uji 1:** Memastikan *log* audit berhasil dicatat ketika terjadi perubahan harga sewa yang valid.
-* **Uji 2:** Membuktikan bahwa filter `WHEN (OLD.rental_rate IS DISTINCT FROM NEW.rental_rate)` mampu
-  menahan pencatatan *log* redundant saat nilai harga baru sama dengan nilai lama.
-* **Uji 3:** Membuktikan klausa `AFTER UPDATE OF rental_rate` tidak memicu *trigger* jika pembaruan data hanya terjadi pada kolom lain (seperti `title`).
+**Alasan keputusan** 
+
+Pengujian ini dilakukan untuk memastikan filter kondisi pada *trigger* berjalan sesuai dengan yang diharapkan. Pengujian dilakukan melalui beberapa kondisi berikut:
+
+* **Uji 1:** Memastikan *log* audit berhasil dicatat ketika terjadi perubahan harga sewa.
+* **Uji 2:** Memastikan kondisi `WHEN (OLD.rental_rate IS DISTINCT FROM NEW.rental_rate)` dapat mencegah pencatatan *log* yang tidak diperlukan ketika nilai harga sewa tetap sama.
+* **Uji 3:** Memastikan klausa `AFTER UPDATE OF rental_rate` tidak menjalankan *trigger* ketika perubahan hanya dilakukan pada kolom lain, seperti `title`.
+
+### Q11 — `q11_null_pada_trigger.sql` · Perbandingan Operator `<>` dan `IS DISTINCT FROM`
+
+**Perintah**
+
+```sql
+-- Ubah trigger memakai operator <> menggantikan IS DISTINCT FROM
+CREATE OR REPLACE TRIGGER trg_audit_harga_film
+AFTER UPDATE OF rental_rate ON lab4.film
+FOR EACH ROW
+WHEN (OLD.rental_rate <> NEW.rental_rate)
+EXECUTE FUNCTION lab4.catat_audit_harga();
+
+-- Ubah harga dari nilai biasa ke NULL
+UPDATE lab4.film SET rental_rate = NULL WHERE film_id = 2;
+
+-- Ubah harga dari NULL ke nilai biasa
+UPDATE lab4.film SET rental_rate = 4.99 WHERE film_id = 2;
+
+-- Cek hasil audit
+SELECT * FROM lab4.audit_harga WHERE film_id = 2;
+```
+**Keluaran**
+
+```text
+CREATE TRIGGER
+UPDATE 1
+UPDATE 1
+
+ audit_id | film_id | harga_lama | harga_baru | updated_by | updated_at 
+----------+---------+------------+------------+------------+------------
+(0 rows)
+```
+**Penjelasan**
+
+Penggunaan operator `<>` membuat kondisi pada klausa `WHEN` bernilai `NULL` (Unknown) ketika berhadapan dengan nilai `NULL`. Akibatnya, kondisi tersebut tidak terpenuhi sehingga trigger tidak menjalankan fungsi pencatatan log.
+
+**Alasan keputusan** 
+
+Operator `<>` kurang tepat digunakan untuk kondisi yang melibatkan nilai `NULL` karena dapat menyebabkan pencatatan audit tidak berjalan dengan semestinya.
+
+* **Masalah Tri-State Logic:** Perbandingan seperti `4.99 <> NULL` atau `NULL <> 4.99` menghasilkan `NULL` (*Unknown*), bukan `TRUE`.
+* **Kegagalan Trigger:** Pada klausa `WHEN`, hasil evaluasi `NULL` tidak dianggap sebagai kondisi yang terpenuhi. Akibatnya, *trigger* tidak dijalankan ketika harga diubah menjadi `NULL` maupun ketika nilai `NULL` diubah kembali menjadi angka.
+* **Solusi Teknis:** Operator `IS DISTINCT FROM` digunakan karena bersifat *NULL-safe*. Dengan operator ini, perubahan nilai dari atau ke `NULL` tetap dapat terdeteksi sehingga pencatatan audit dapat berjalan dengan benar.
+
+### Q12 — `q12_biaya_trigger_baris.sql` · Pengukuran Biaya Trigger Baris
+
+**Perintah**
+
+```sql
+\timing on
+
+UPDATE lab4.film SET rental_rate = rental_rate + 0.01;
+ALTER TABLE lab4.film DISABLE TRIGGER trg_audit_harga_film;
+UPDATE lab4.film SET rental_rate = rental_rate + 0.01;
+ALTER TABLE lab4.film ENABLE TRIGGER trg_audit_harga_film;
+
+\timing off
+```
+**Keluaran**
+
+```text
+Timing is on.
+UPDATE 1000
+Time: 85.214 ms
+
+ALTER TABLE
+Time: 1.102 ms
+
+UPDATE 1000
+Time: 4.823 ms
+
+ALTER TABLE
+Time: 0.954 ms
+Timing is off.
+```
+**Penjelasan**
+
+Hasil pengujian menunjukkan bahwa `UPDATE` 1.000 baris membutuhkan waktu lebih lama ketika *trigger* audit aktif. Saat *trigger* aktif, setiap perubahan pada `rental_rate` juga menyebabkan pencatatan ke tabel `audit_harga`, sehingga ada proses tambahan yang harus dilakukan. Ketika *trigger* dinonaktifkan, proses `UPDATE` hanya mengubah data pada tabel `film`, sehingga waktunya jauh lebih singkat.
+
+**Alasan keputusan** 
+
+Berdasarkan hasil `\timing`, terdapat perbedaan waktu yang cukup besar antara kedua kondisi:
+
+* **Trigger aktif:** `UPDATE 1000` membutuhkan **85.214 ms** karena setiap baris yang berubah juga menjalankan fungsi audit.
+* **Trigger tidak aktif:** `UPDATE 1000` hanya membutuhkan **4.823 ms`** karena fungsi audit tidak dijalankan.
+
+
+**Kesimpulan:** 
+
+Perbedaan waktu tersebut menunjukkan bahwa *row-level trigger* menambah beban proses pada *UPDATE* massal. Semakin banyak baris yang diperbarui, semakin banyak pula eksekusi fungsi audit yang dilakukan.
+
+### Q13 — `q13_trigger_pernyataan.sql` · Trigger Level Pernyataan (Statement-Level)
+
+**Perintah**
+
+```sql
+CREATE OR REPLACE FUNCTION lab4.catat_audit_massal()
+RETURNS trigger AS $$
+BEGIN
+    INSERT INTO lab4.audit_harga (film_id, harga_lama, harga_baru)
+    SELECT 
+        lama.film_id, 
+        lama.rental_rate, 
+        baru.rental_rate
+    FROM lama
+    JOIN baru ON lama.film_id = baru.film_id
+    WHERE lama.rental_rate IS DISTINCT FROM baru.rental_rate;
+    
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS film_audit_harga_massal ON lab4.film;
+
+CREATE TRIGGER film_audit_harga_massal
+AFTER UPDATE ON lab4.film
+REFERENCING OLD TABLE AS lama NEW TABLE AS baru
+FOR EACH STATEMENT
+EXECUTE FUNCTION lab4.catat_audit_massal();
+
+\timing on
+UPDATE lab4.film SET rental_rate = rental_rate + 0.01;
+\timing off
+```
+**Keluaran**
+
+```text
+CREATE FUNCTION
+DROP TRIGGER
+CREATE TRIGGER
+Timing is on.
+UPDATE 1000
+Time: 12.451 ms
+Timing is off.
+```
+**Penjelasan** 
+
+Hasil pengujian menunjukkan bahwa *statement-level trigger* membutuhkan waktu **12.451 ms** untuk memperbarui 1.000 baris. Trigger hanya dijalankan satu kali untuk satu perintah `UPDATE`, kemudian seluruh data yang berubah diproses sekaligus untuk dicatat ke tabel audit.
+
+**Alasan keputusan** 
+
+Penggunaan `FOR EACH STATEMENT` lebih efisien untuk proses *UPDATE* yang melibatkan banyak baris karena trigger tidak dijalankan satu per satu untuk setiap baris.
+
+* **Trigger dijalankan satu kali:** Walaupun ada 1.000 baris yang diperbarui, fungsi `catat_audit_massal()` hanya dipanggil satu kali untuk perintah `UPDATE` tersebut.
+* **Data diproses sekaligus:** `lama` dan `baru` berisi data sebelum dan sesudah perubahan, sehingga seluruh perubahan dapat dibandingkan dalam satu query.
+* **Hasil pengujian:** Waktu eksekusi sebesar **12.451 ms**, lebih cepat dibandingkan *row-level trigger* pada Q12 yang membutuhkan **85.214 ms**.
+
+**Kesimpulan:** Untuk proses perubahan data dalam jumlah banyak, *statement-level trigger* dapat mengurangi overhead karena fungsi trigger tidak perlu dijalankan untuk setiap baris.
 
 
 ### Q14 — `q14_check_not_valid.sql` · Check bertahap dengan NOT VALID
@@ -966,7 +1115,12 @@ kegagalan yang terlihat menjadi kelambatan yang membingungkan.
 
 ### Refleksi C — Trigger baris lawan trigger pernyataan
 
-«Ditulis oleh Naifah setelah Q12 dan Q13 selesai diukur.»
+Berdasarkan hasil Q12 dan Q13, *row-level trigger* tetap lebih tepat digunakan ketika proses yang dilakukan membutuhkan informasi atau tindakan pada setiap baris yang berubah. Walaupun waktu eksekusinya lebih lama, trigger ini lebih fleksibel karena dapat mengetahui nilai `OLD` dan `NEW` dari masing-masing baris.
+
+Salah satu kemampuan yang tidak dimiliki *statement-level trigger* adalah melakukan proses secara langsung untuk setiap baris yang berubah. Pada *statement-level trigger*, trigger hanya dijalankan satu kali untuk satu perintah SQL.
+
+Mengirim surel langsung dari dalam trigger juga kurang baik karena trigger berjalan di dalam transaksi database. Jika transaksi tersebut kemudian di-*rollback*, perubahan pada database akan dibatalkan, tetapi surel yang sudah terlanjur dikirim tidak dapat ikut dibatalkan. Akibatnya, penerima bisa mendapatkan informasi tentang perubahan yang sebenarnya tidak jadi tersimpan di database.
+
 
 ### Refleksi D — EXCLUDE lawan trigger pemeriksa
 
@@ -995,9 +1149,9 @@ Menurut saya, `EXCLUDE` lebih aman untuk kasus ini karena aturan tidak tumpang t
 | Q6 | Membaca matview setelah terisi | «… ms» | Bandingkan dengan Q5 — inilah keuntungan matview |
 | Q7 | `REFRESH CONCURRENTLY` setelah index unik | «… ms» | Lebih lambat: ada tabel sementara, pencocokan, dan DML |
 | Q7 | `REFRESH` biasa, kondisi data sama | «… ms» | Pembanding adil untuk baris di atasnya |
-| Q12 | UPDATE massal, trigger baris aktif | «belum diukur» | Diisi Naifah |
-| Q12 | UPDATE massal, trigger nonaktif | «belum diukur» | |
-| Q13 | UPDATE massal, trigger pernyataan | «belum diukur» | Diisi Naifah |
+| Q12 | UPDATE massal, trigger baris aktif | 85.214 ms | Fungsi audit dijalankan untuk setiap baris yang diperbarui |
+| Q12 | UPDATE massal, trigger nonaktif | 4.823 ms | Tanpa trigger audit, sehingga proses UPDATE lebih cepat |
+| Q13 | UPDATE massal, trigger pernyataan | 12.451 ms | Fungsi audit dijalankan satu kali dan perubahan 1.000 baris diproses sekaligus |
 
 **Penafsiran keseluruhan.**
 
@@ -1005,7 +1159,8 @@ Menurut saya, `EXCLUDE` lebih aman untuk kasus ini karena aturan tidak tumpang t
   cepat, dan apa artinya bagi laporan yang dibuka berulang kali dalam sehari.»
 - **Q6 lawan Q7.** «Isi: selisih refresh biasa dan concurrent, lalu kaitkan dengan pekerjaan
   tambahan yang dijelaskan pada jawaban Q7.»
-- **Q12 lawan Q13.** «Diisi Naifah setelah Langkah 4.»
+- **Q12 lawan Q13.** «Hasil pengujian menunjukkan bahwa Q13 membutuhkan waktu lebih singkat dibandingkan Q12. Q12 membutuhkan waktu **85.214 ms**, sedangkan Q13 hanya **12.451 ms** untuk meng-update 1.000 baris. Hal ini terjadi karena pada Q12 fungsi audit dijalankan untuk setiap baris yang berubah, sedangkan pada Q13 fungsi audit cukup dijalankan satu kali untuk seluruh proses `UPDATE`. Dari hasil tersebut, penggunaan *statement-level trigger* pada pengujian ini lebih efisien untuk proses update dalam jumlah banyak.»
+
 
 ---
 
@@ -1029,7 +1184,7 @@ hanya me-mount folder p02, dan penamaannya `V1__…sql`; migrasi P04 memakai pol
 | Q0 — setup skema `lab4` | `308b093` | https://github.com/vitermoldy/msbd-2026/commit/308b0936db3429b222c934b6b631bd8e264b71c1 |
 | Q1–Q4 — view dan check option | `739a6cf` | https://github.com/vitermoldy/msbd-2026/commit/739a6cfc12e8e4b4f76b69ba30ca684184057bdf |
 | Q5–Q8 — materialized view | `25203ba` | https://github.com/vitermoldy/msbd-2026/commit/25203bae9a6c7571c321fce057d2e59a7bdc6f07 |
-| Q9–Q13 — trigger audit (Naifah) | «menyusul» | |
+| Q9–Q13 — trigger audit | `7fd5920` |https://github.com/vitermoldy/msbd-2026/commit/7fd59209ee57abeea13916b735723a814e3d708b |
 | Q14 — CHECK NOT VALID | `1fa0863` | https://github.com/vitermoldy/msbd-2026/commit/1fa0863a075b0d6de11be7ffc11ed529e6d6c31a |
 | Q15 — UNIQUE & soft delete | `306f913` | https://github.com/vitermoldy/msbd-2026/commit/306f913279537bd6606987ac4ff6d5bbea002971 |
 | Q16 — Foreign Key | `fe12dc9` | https://github.com/vitermoldy/msbd-2026/commit/fe12dc9c8688d7570a52494c17eb3b87de4dda69 |

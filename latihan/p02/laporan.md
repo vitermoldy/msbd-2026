@@ -255,4 +255,4 @@ Hasil pengamatan kemudian didokumentasikan pada bagian bukti untuk menunjukkan a
 | **Gideon Finsus Siburian** | `feat:` melakukan implementasi migration V3-V5 untuk penambahan kolom NOT NULL |
 | **Nadine Tantiara Hutagaol** | `docs:` memperbarui laporan dan melengkapi `laporan.md` <br> `feat:` menambahkan seed yang tidak menggandakan data |
 | **Rizky Cristian Fero Sihombing** | `feat:` menambahkan migration skema awal dan service flyway |
-| **Siti Naifah Batubara** | `docs:` menambahkan ERD sistem helpdesk <br> `docs:` melengkapi bukti screenshot |
+| **Siti Naifah Batubara** | `docs:` membuat ERD sistem helpdesk <br> `docs:` melengkapi bukti screenshot |

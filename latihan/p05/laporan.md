@@ -366,12 +366,7 @@ FROM public.customer ORDER BY public.customer.customer_id
 >>> Q19: 1 statement SELECT
 ```
 
-**Perbandingan dengan Q18.** Menurut log, `selectinload` mengirim dua SELECT: customer
-`LIMIT 10`, lalu rental `WHERE customer_id IN (10 id)`. Sementara itu, `joinedload`
-mengirim satu SELECT yang membungkus query customer `LIMIT 10` sebagai subquery `anon_1` lalu
-melakukan `LEFT OUTER JOIN` ke `rental`. Akibatnya kolom customer terulang pada setiap baris
-rental, sehingga hasilnya 278 baris untuk 10 customer (32 + 27 + 26 + 22 + 38 + 28 + 33 + 24 +
-23 + 25), dan `.unique()` wajib dipakai untuk menyatukan kembali objek customer yang sama.
+**Perbandingan dengan Q18.** Log menunjukkan `selectinload` (Q18) mengirim dua SELECT terpisah, yaitu customer `LIMIT 10` lalu rental `WHERE customer_id IN (10 id)`, sedangkan `joinedload` (Q19) mengirim satu SELECT yang membungkus customer `LIMIT 10` sebagai subquery `anon_1` lalu `LEFT OUTER JOIN` ke `rental`, sehingga data customer terulang di 278 baris dan hasilnya wajib dirapikan dengan `.unique()`.
 
 ### Q20 — ORM dibanding SQL mentah · Lima film tersewa terbanyak
 

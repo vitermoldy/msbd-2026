@@ -13,7 +13,7 @@ from sqlalchemy import ForeignKey, create_engine, desc, event, func, select, tex
 from sqlalchemy.orm import (DeclarativeBase, Mapped, Session, joinedload,
                             mapped_column, relationship, selectinload)
 
-DSN = os.environ.get("DSN", "postgresql://postgres:postgres@localhost:5432/dvdrental")
+DSN = os.environ.get("DSN", "postgresql://msbd@localhost:5432/pagila")
 URL = DSN.replace("postgresql://", "postgresql+psycopg://", 1)  # pakai driver psycopg 3
 
 engine = create_engine(URL, echo=True)

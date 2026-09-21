@@ -1,4 +1,4 @@
--- Diminta: menyiapkan skema lab5 (enum, domain, rental_tx, payment_tx) di atas data dvdrental.
+-- Diminta: menyiapkan skema lab5 (enum, domain, rental_tx, payment_tx) di atas data Pagila (basis data pagila).
 -- Dipilih: skema terpisah lab5 + DROP ... CASCADE agar setup bisa diulang tanpa menyentuh public.
 -- Alternatif: membuat tabel langsung di public; tidak dipilih karena bisa merusak data praktikum lain.
 DROP SCHEMA IF EXISTS lab5 CASCADE;

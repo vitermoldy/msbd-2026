@@ -1,0 +1,3 @@
+CREATE PROCEDURE
+psql:/proc/self/fd/0:34: ERROR:  customer, inventory, atau staff tidak dikenal
+CONTEXT:  PL/pgSQL function lab5.process_rental_fk(integer,integer,integer,numeric,jsonb,bigint) line 18 at RAISE

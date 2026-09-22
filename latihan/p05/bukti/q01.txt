@@ -1,0 +1,6 @@
+CREATE FUNCTION
+ total_dibayar 
+---------------
+          4.99
+(1 row)
+

@@ -28,7 +28,7 @@
 | Nama | NIM | Kontribusi | Commit |
 |---|---|---|---|
 | Viter Moldy Kesuma | 251402079 | Langkah 1 — `q00_setup.sql` dan verifikasi lingkungan · Langkah 5 — `lab5_orm.py`, Q16–Q20, Refleksi D · `README.md` · kerangka `laporan.md` | [`0d57034`](https://github.com/vitermoldy/msbd-2026/commit/0d57034e5018fd2f3b3e5b8ffa6d327033260839) · [`ba18fc9`](https://github.com/vitermoldy/msbd-2026/commit/ba18fc926d6576f68628a449f2b6e64fd1628502) · [`994a5c9`](https://github.com/vitermoldy/msbd-2026/commit/994a5c9ecfcdc123d7f4d38a0c010c501a1c8b5d) |
-| Nadine Tantiara Hutagaol | 251402050 | Langkah 2 — PL/pgSQL dan batas transaksi, `q01`–`q05`, Refleksi A | «belum ada commit» |
+| Nadine Tantiara Hutagaol | 251402050 | Langkah 2 — PL/pgSQL dan batas transaksi, `q01`–`q05`, Refleksi A | [`51d7b5a`](https://github.com/vitermoldy/msbd-2026/commit/51d7b5a7f41d88b5ccf8402493deab341228bb79) · [`98400f3`](https://github.com/vitermoldy/msbd-2026/commit/98400f3b48155ddd85d3c03e1d0db321bbe0fa86) |
 | Siti Naifah Batubara | 251402067 | Langkah 3 — tipe data, `q06`–`q09`, Refleksi B | «belum ada commit» |
 | Gideon Finsus Siburian | 251402038 | Langkah 4 — psycopg 3, `lab5_driver.py`, `q11_uji_injeksi.py`, Q10–Q15, Refleksi C | «belum ada commit» |
 | Rizky Cristian Fero Sihombing | 251402056 | Langkah 6 — FastAPI, `lab5_api.py`, Q21–Q24, Refleksi E | «belum ada commit» |
@@ -151,30 +151,309 @@ soal berikutnya dikerjakan:
 
 ---
 
-### Q1 — `q01_total_dibayar.sql` · Function total pembayaran
+### Q1 - `q01_total_dibayar.sql` · Function total pembayaran
 
-> «Belum diisi — Nadine.» Cantumkan isi function `lab5.total_dibayar`, hasil pemanggilan
-> `SELECT lab5.total_dibayar(...)`, dan alasan memilih `LANGUAGE sql STABLE` + `coalesce`.
+Pada Q01 dibuat function `lab5.total_dibayar` untuk menghitung total pembayaran berdasarkan `rental_id`.
 
-### Q2 — `q02_process_rental.sql` · Procedure `process_rental`
+**Isi function:**
 
-> «Belum diisi — Nadine.» Cantumkan isi procedure, jumlah baris `rental_tx` dan `payment_tx`
-> sebelum dan sesudah satu `CALL`, serta hasil join keduanya.
+    CREATE OR REPLACE FUNCTION lab5.total_dibayar(p_rental_id bigint)
+    RETURNS numeric
+    LANGUAGE sql
+    STABLE
+    AS $$
+        SELECT COALESCE(SUM(amount), 0)
+        FROM lab5.payment_tx
+        WHERE rental_id = p_rental_id;
+    $$;
 
-### Q3 — `q03_buktikan_rollback.sql` · Rollback karena pembayaran negatif
+    SELECT lab5.total_dibayar(1);
 
-> «Belum diisi — Nadine.» Cantumkan galat utuh beserta SQLSTATE, jumlah `rental_tx` sebelum
-> dan sesudah, serta penjelasan mengapa jumlahnya tidak bertambah.
+**Perintah menjalankan:**
 
-### Q4 — `q04_commit_dalam_procedure.sql` · COMMIT di dalam procedure
+    docker compose exec -T postgres psql -U msbd -d latihan -c "SELECT lab5.total_dibayar(1);"
 
-> «Belum diisi — Nadine.» Cantumkan salinan procedure dengan `COMMIT`, kode Python pemanggil
-> di dalam `with psycopg.connect(...)`, galat yang muncul, dan penjelasan sebabnya.
+**Keluaran:**
 
-### Q5 — `q05_exception_fk.sql` · Menangkap `foreign_key_violation`
+     total_dibayar 
+    ---------------
+              4.99
+    (1 row)
 
-> «Belum diisi — Nadine.» Cantumkan galat sebelum dan sesudah ditangkap, informasi yang
-> hilang setelah galat ditangkap, dan kapan penangkapan seperti itu layak dilakukan.
+Hasil pemanggilan `SELECT lab5.total_dibayar(1);` adalah `4.99`, sehingga total pembayaran untuk `rental_id` 1 adalah `4.99`.
+
+**Alasan keputusan:**
+
+`LANGUAGE sql` dipilih karena isi function hanya menjalankan satu query SQL untuk menghitung total pembayaran. `STABLE` digunakan karena function hanya membaca data dan tidak mengubah isi dari database. `COALESCE(SUM(amount), 0)` digunakan agar hasilnya menjadi `0` jika suatu `rental_id` belum memiliki pembayaran atau tidak ada pembayaran yang ditemukan, bukan `NULL`.
+
+
+### Q02 - `q02_process_rental.sql` · Procedure transaksi rental dan pembayaran
+
+Pada Q02 dibuat procedure `lab5.process_rental` untuk memasukkan data rental sekaligus data pembayaran yang berhubungan dengan rental tersebut.
+
+**Isi procedure:**
+
+    CREATE OR REPLACE PROCEDURE lab5.process_rental(
+        IN p_customer_id  integer,
+        IN p_inventory_id integer,
+        IN p_staff_id     integer,
+        IN p_amount       numeric(10,2),
+        IN p_metadata     jsonb DEFAULT '{}'::jsonb,
+        INOUT p_rental_id bigint DEFAULT NULL
+    ) LANGUAGE plpgsql AS $$
+    BEGIN
+        IF p_amount <= 0 THEN
+        RAISE EXCEPTION 'nilai pembayaran harus positif, diterima %', p_amount
+        USING ERRCODE = '22003';
+    END IF;
+    
+    INSERT INTO lab5.rental_tx (customer_id, inventory_id, staff_id, metadata)
+    VALUES (p_customer_id, p_inventory_id, p_staff_id,
+          coalesce(p_metadata, '{}'::jsonb))
+    RETURNING rental_id INTO p_rental_id;
+    
+    INSERT INTO lab5.payment_tx (rental_id, amount)
+    VALUES (p_rental_id, p_amount);
+    
+    END;
+    $$;
+    
+    CALL lab5.process_rental(1, 1, 1, 4.99);
+
+    SELECT * FROM lab5.rental_tx;
+    SELECT * FROM lab5.payment_tx;
+
+**Perintah melihat jumlah data sebelum `CALL`:**
+
+    docker compose exec -T postgres psql -U msbd -d latihan -c "SELECT count(*) AS rental_sebelum FROM lab5.rental_tx; SELECT count(*) AS payment_sebelum FROM lab5.payment_tx;"
+
+**Keluaran sebelum:**
+
+     rental_sebelum 
+    ----------------
+                  2
+    (1 row)
+
+     payment_sebelum 
+    -----------------
+                   2
+    (1 row)
+
+Sebelum procedure dipanggil, terdapat `2` baris pada `rental_tx` dan `2` baris pada `payment_tx`.
+
+**Perintah menjalankan satu `CALL`:**
+
+    docker compose exec -T postgres psql -U msbd -d latihan -c "CALL lab5.process_rental(1, 1, 1, 4.99);"
+
+**Keluaran:**
+
+     p_rental_id 
+    -------------
+               6
+    (1 row)
+
+Procedure menghasilkan `rental_id` baru yaitu `6`.
+
+**Perintah melihat jumlah data sesudah `CALL`:**
+
+    docker compose exec -T postgres psql -U msbd -d latihan -c "SELECT count(*) AS rental_sesudah FROM lab5.rental_tx; SELECT count(*) AS payment_sesudah FROM lab5.payment_tx;"
+
+**Keluaran sesudah:**
+
+     rental_sesudah 
+    ----------------
+                  3
+    (1 row)
+
+     payment_sesudah 
+    -----------------
+                   3
+    (1 row)
+
+Setelah satu kali `CALL`, jumlah `rental_tx` bertambah dari `2` menjadi `3`, sedangkan `payment_tx` bertambah dari `2` menjadi `3`.
+
+**Perintah melihat hasil join:**
+
+    docker compose exec -T postgres psql -U msbd -d latihan -c "SELECT r.rental_id, r.customer_id, r.inventory_id, r.staff_id, p.payment_id, p.amount FROM lab5.rental_tx r JOIN lab5.payment_tx p ON p.rental_id = r.rental_id ORDER BY r.rental_id DESC LIMIT 1;"
+
+**Keluaran:**
+
+    SELECT
+    r.rental_id,
+    r.customer_id,
+    r.inventory_id,
+    r.staff_id,
+    p.payment_id,
+    p.amount
+    
+    FROM lab5.rental_tx r
+    JOIN lab5.payment_tx p
+    ON p.rental_id = r.rental_id
+    ORDER BY r.rental_id DESC
+    LIMIT 1;
+
+
+     rental_id | customer_id | inventory_id | staff_id | payment_id | amount 
+    -----------+-------------+--------------+----------+------------+--------
+             6 |           1 |            1 |        1 |          3 |   4.99
+    (1 row)
+
+Hasil join menunjukkan bahwa `rental_id` 6 pada `rental_tx` terhubung dengan `payment_id` 3 pada `payment_tx`. Data rental tersebut memiliki `customer_id` 1, `inventory_id` 1, `staff_id` 1, dan pembayaran sebesar `4.99`.
+
+**Alasan keputusan:**
+
+Procedure dipilih karena salah satu pemanggilan perlu melakukan dua `INSERT` yang saling berkaitan. `INOUT p_rental_id` digunakan untuk mengembalikan ID penyewaan yang baru dibuat. Tidak menggunakan `COMMIT` di dalam procedure karena batas transaksi diserahkan kepada pemanggil.
+
+
+### Q03 - `q03_exception_amount.sql` · Validasi jumlah pembayaran
+
+Pada Q03 dilakukan pengujian terhadap pembayaran dengan nilai negatif. Procedure memberikan exception apabila nilai pembayaran kurang dari atau sama dengan `0`.
+
+**Perintah untuk melihat jumlah `rental_tx` sebelum pengujian:**
+
+    docker compose exec -T postgres psql -U msbd -d latihan -c "SELECT count(*) AS rental_sebelum FROM lab5.rental_tx;"
+
+**Keluaran sebelum:**
+
+     rental_sebelum 
+    ----------------
+                  3
+    (1 row)
+
+Sebelum pengujian terdapat `3` baris pada `rental_tx`.
+
+**Perintah menjalankan procedure dengan nilai pembayaran negatif:**
+
+    docker compose exec -T postgres psql -U msbd -d latihan -c "CALL lab5.process_rental(1, 1, 1, -4.99);"
+
+**Galat yang muncul:**
+
+    ERROR:  nilai pembayaran harus positif, diterima -4.99
+    CONTEXT:  PL/pgSQL function lab5.process_rental(integer,integer,integer,numeric,jsonb,bigint) line 4 at RAISE
+
+**SQLSTATE:**
+
+    22003
+
+**Perintah melihat jumlah `rental_tx` sesudah pengujian:**
+
+    docker compose exec -T postgres psql -U msbd -d latihan -c "SELECT count(*) AS rental_sesudah FROM lab5.rental_tx;"
+
+**Keluaran sesudah:**
+
+     rental_sesudah 
+    ----------------
+                  3
+    (1 row)
+
+Jumlah `rental_tx` tetap `3` sebelum dan sesudah pengujian.
+
+**Alasan keputusan:**
+
+Jumlah rental tidak bertambah atau tetap 3 terjadi karena procedure memeriksa `p_amount` duluan. Nilai `-4.99` memenuhi kondisi `p_amount <= 0`, sehingga `RAISE EXCEPTION` dijalankan sebelum `INSERT`. Sehingga pemanggil gagal dan jumlah baris tidak bertambah.
+
+
+### Q04 - `q04_commit_dalam_procedure.sql` · COMMIT di dalam procedure
+
+Pada Q04 diuji penggunaan `COMMIT` di dalam procedure ketika procedure dipanggil melalui Python menggunakan `psycopg`.
+
+**Salinan procedure dengan `COMMIT`:**
+
+    CREATE OR REPLACE PROCEDURE lab5.process_rental_commit(
+        IN p_customer_id  integer,
+        IN p_inventory_id integer,
+        IN p_staff_id     integer,
+        IN p_amount       numeric(10,2),
+        IN p_metadata     jsonb DEFAULT '{}'::jsonb,
+        INOUT p_rental_id bigint DEFAULT NULL
+    ) LANGUAGE plpgsql AS $$
+    BEGIN
+        IF p_amount <= 0 THEN
+            RAISE EXCEPTION 'nilai pembayaran harus positif, diterima %', p_amount
+            USING ERRCODE = '22003';
+    END IF;
+    
+    INSERT INTO lab5.rental_tx (customer_id, inventory_id, staff_id, metadata)
+    VALUES (p_customer_id, p_inventory_id, p_staff_id,
+          coalesce(p_metadata, '{}'::jsonb))
+    RETURNING rental_id INTO p_rental_id;
+    
+    COMMIT;
+        INSERT INTO lab5.payment_tx (rental_id, amount)
+        VALUES (p_rental_id, p_amount);
+    END;
+    $$;
+
+**Kode Python pemanggil:**
+
+    import psycopg
+    
+    DSN = "host=localhost port=5432 dbname=latihan user=msbd password=msbd2026"
+    
+    try:
+    with psycopg.connect(DSN) as conn:
+        conn.execute(
+            """
+            CALL lab5.process_rental_commit(
+                %s::integer,
+                %s::integer,
+                %s::integer,
+                %s::numeric
+            )
+            """,
+            (1, 1, 1, 4.99),
+        )
+        
+        except psycopg.Error as exc:
+            print(f"{type(exc).__name__}: {exc}")
+            print(f"SQLSTATE: {exc.sqlstate}")
+
+**Galat yang muncul:**
+
+    InvalidTransactionTermination : invalid transaction termination
+    SQLSTATE: 2D000
+
+**Alasan keputusan:**
+
+Galat tersebut terjadi karena procedure menjalankan `COMMIT`, sedangkan pemanggilannya dilakukan melalui transaksi yang dikelola oleh `psycopg` di dalam `with psycopg.connect(...)`. Akibatnya PostgreSQL menolak penghentian transaksi dari dalam procedure dan menghasilkan `invalid transaction termination` dengan SQLSTATE `2D000`.
+
+Pengujian ini menunjukkan bahwa pengelolaan transaksi perlu ditentukan dengan jelas. Jika transaksi dikelola oleh aplikasi, procedure tidak perlu melakukan `COMMIT` sendiri.
+
+
+### Q05 - `q05_exception_fk.sql` · Penanganan foreign key violation
+
+Pada Q05 dilakukan penanganan kesalahan `foreign_key_violation`. Kesalahan ini terjadi ketika data yang dimasukkan tidak memiliki data referensi yang sesuai.
+
+**Penanganan error:**
+
+    EXCEPTION
+        WHEN foreign_key_violation THEN
+            RAISE EXCEPTION 'customer, inventory, atau staff tidak dikenal';
+
+**Galat sebelum ditangkap:**
+
+    ERROR:  insert or update on table "rental_tx" violates foreign key constraint
+    DETAIL:  Key (...) is not present in table (...)
+
+Sebelum ditangkap, PostgreSQL memberikan informasi teknis mengenai pelanggaran foreign key, termasuk tabel dan key yang bermasalah.
+
+**Perintah pengujian:**
+
+    CALL lab5.process_rental_fk(999999, 1, 1, 4.99);
+
+**Galat sesudah ditangkap:**
+
+    ERROR:  customer, inventory, atau staff tidak dikenal
+
+Setelah ditangkap, pesan error bawaan diganti dengan pesan yang lebih sederhana.
+
+**Informasi yang hilang setelah galat ditangkap:**
+
+Informasi teknis dari error asli tidak lagi terlihat pada pesan akhir, seperti nama constraint foreign key, tabel yang mengalami pelanggaran, dan detail key yang tidak ditemukan. Informasi tersebut sebenarnya dapat membantu ketika melakukan debugging.
+
+**Alasan keputusan:**
+
+Penangkapan `foreign_key_violation` layak dilakukan ketika aplikasi membutuhkan pesan error yang lebih sederhana dan mudah dipahami oleh pengguna. Namun, pada tahap pengembangan atau debugging, informasi error asli tetap berguna untuk mengetahui penyebab masalah secara lebih spesifik. Oleh karena itu, penangkapan error sebaiknya digunakan ketika detail teknis dari database memang tidak perlu ditampilkan langsung kepada pengguna.
 
 ### Q6 — `q06_domain_positive_amount.sql` · Domain menolak nol dan negatif
 
@@ -457,7 +736,8 @@ perbedaan kerja di PostgreSQL.
 *Setelah Q3 dan Q4, siapa yang memulai transaksi, siapa yang mengakhirinya, dan bagaimana
 kelompok membuktikannya dari data?*
 
-> «Belum diisi — Nadine.»
+> Setelah Q3 dan Q4, kelompok memahami bahwa transaksi pada procedure sebaiknya dimulai dan diakhiri oleh pemanggil, bukan oleh procedure itu sendiri. Pada Q3, ketika nilai pembayaran -4.99 menyebabkan exception, jumlah data `rental_tx` tetap 3 sehingga tidak ada data baru yang masuk. Hal ini menunjukkan bahwa pemanggilan yang gagal tidak menghasilkan penambahan data.
+Pada Q4, ketika procedure mencoba menjalankan `COMMIT` sendiri saat dipanggil dari Python menggunakan `with psycopg.connect(...)`, muncul galat InvalidTransactionTermination dengan SQLSTATE 2D000. Dari kedua pengujian tersebut dapat dilihat bahwa batas transaksi dikendalikan oleh pemanggil. Data sebelum dan sesudah pemanggilan serta galat pada Q4 menjadi bukti dari hasil pengujian tersebut.
 
 ### Refleksi B — `tags` atau `metadata`: tetap atau menjadi tabel
 
@@ -566,7 +846,15 @@ dicocokkan dengan jumlah baris `SELECT` pada log `echo=True` di berkas yang sama
 - tiga kendala lingkungan (venv terputus, basis data `latihan` kosong, dan autentikasi DSN)
   ditelusuri dari pesan galat masing-masing lalu diperbaiki sebelum soal dikerjakan.
 
-**Nadine (Langkah 2).** «Belum diisi.»
+**Nadine (Langkah 2).** `q01_total_dibayar.sql`, `q02_process_rental.sql`, `q03_buktikan_rollback.sql`, `q04_commit_dalam_procedure.sql`, `q05_exception_fk.sql`
+
+Penggunaan AI jadi alat bantu di beberapa bagian tugas dan membantu untuk lebih memahami tugas:
+
+- membantu memahami beberapa materi seperti function, procedure, exception, foreign key, rollback, dan transaksi pada PostgreSQL;
+- membantu memeriksa struktur kode SQL dan Python serta memberikan saran jika terdapat bagian yang perlu diperbaiki;
+- membantu mengatasi saat ada eror dalam mencoba menjalankan query yang sudah dibuat dan juga jika ada eror pada terminal, dan membantu untuk lebih memahami codenya.
+
+Seluruh kode yang digunakan tetap dijalankan dan juga diujikan secara langsung pada database kelompok dengan Docker dan PostgreSQL. Hasil yang dicantumkan dalam laporan berasal dari hasil pengujian yang dilakukan secara nyata pada laptop pribadi dalam pengerjaan tugas, lalu selebihnya mengikuti dan menyesuaikan dengan ketentuan dan arahan yang diberikan dalam tugas.
 
 **Naifah (Langkah 3).** «Belum diisi.»
 

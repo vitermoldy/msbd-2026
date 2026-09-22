@@ -157,6 +157,7 @@ Pada Q01 dibuat function `lab5.total_dibayar` untuk menghitung total pembayaran 
 
 **Isi function:**
 
+```sql
     CREATE OR REPLACE FUNCTION lab5.total_dibayar(p_rental_id bigint)
     RETURNS numeric
     LANGUAGE sql
@@ -168,6 +169,7 @@ Pada Q01 dibuat function `lab5.total_dibayar` untuk menghitung total pembayaran 
     $$;
 
     SELECT lab5.total_dibayar(1);
+```
 
 **Perintah menjalankan:**
 
@@ -193,6 +195,7 @@ Pada Q02 dibuat procedure `lab5.process_rental` untuk memasukkan data rental sek
 
 **Isi procedure:**
 
+```sql
     CREATE OR REPLACE PROCEDURE lab5.process_rental(
         IN p_customer_id  integer,
         IN p_inventory_id integer,
@@ -222,6 +225,7 @@ Pada Q02 dibuat procedure `lab5.process_rental` untuk memasukkan data rental sek
 
     SELECT * FROM lab5.rental_tx;
     SELECT * FROM lab5.payment_tx;
+```
 
 **Perintah melihat jumlah data sebelum `CALL`:**
 
@@ -278,6 +282,7 @@ Setelah satu kali `CALL`, jumlah `rental_tx` bertambah dari `2` menjadi `3`, sed
 
 **Keluaran:**
 
+```sql
     SELECT
     r.rental_id,
     r.customer_id,
@@ -291,6 +296,7 @@ Setelah satu kali `CALL`, jumlah `rental_tx` bertambah dari `2` menjadi `3`, sed
     ON p.rental_id = r.rental_id
     ORDER BY r.rental_id DESC
     LIMIT 1;
+```
 
 
      rental_id | customer_id | inventory_id | staff_id | payment_id | amount 
@@ -359,6 +365,7 @@ Pada Q04 diuji penggunaan `COMMIT` di dalam procedure ketika procedure dipanggil
 
 **Salinan procedure dengan `COMMIT`:**
 
+```sql
     CREATE OR REPLACE PROCEDURE lab5.process_rental_commit(
         IN p_customer_id  integer,
         IN p_inventory_id integer,
@@ -383,9 +390,11 @@ Pada Q04 diuji penggunaan `COMMIT` di dalam procedure ketika procedure dipanggil
         VALUES (p_rental_id, p_amount);
     END;
     $$;
+```
 
 **Kode Python pemanggil:**
 
+```python
     import psycopg
     
     DSN = "host=localhost port=5432 dbname=latihan user=msbd password=msbd2026"
@@ -407,6 +416,7 @@ Pada Q04 diuji penggunaan `COMMIT` di dalam procedure ketika procedure dipanggil
         except psycopg.Error as exc:
             print(f"{type(exc).__name__}: {exc}")
             print(f"SQLSTATE: {exc.sqlstate}")
+```
 
 **Galat yang muncul:**
 

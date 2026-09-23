@@ -824,7 +824,7 @@ hilang jika salah satunya dihapus, untuk kedua arah._
 
 Kalau Field(gt=0) di Pydantic dihapus: request dengan amount negatif akan diteruskan ke database, memicu pelanggaran domain lab5.positive_amount, tertangkap sebagai CheckViolation, dan tetap menghasilkan 422, tapi lebih lambat (round-trip ke database dulu) dan galatnya jadi kurang spesifik (pesan generik "melanggar aturan basis data", bukan nama field yang salah).
 
-## Kalau domain lab5.positive_amount di database dihapus: aplikasi jadi satu-satunya penjaga. Ini berbahaya karena siapa pun yang menulis langsung ke database (migrasi manual, skrip admin, aplikasi lain yang nanti ikut memakai database yang sama) tidak lagi tertahan aturan apa pun, data korup bisa masuk tanpa lewat endpoint ini sama sekali. Validasi di aplikasi melindungi satu jalur masuk; constraint di database melindungi semua jalur masuk.
+Kalau domain lab5.positive_amount di database dihapus: aplikasi jadi satu-satunya penjaga. Ini berbahaya karena siapa pun yang menulis langsung ke database (migrasi manual, skrip admin, aplikasi lain yang nanti ikut memakai database yang sama) tidak lagi tertahan aturan apa pun, data korup bisa masuk tanpa lewat endpoint ini sama sekali. Validasi di aplikasi melindungi satu jalur masuk; constraint di database melindungi semua jalur masuk.
 
 ## Di Mana Aturan Itu Tinggal
 

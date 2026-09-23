@@ -29,7 +29,7 @@
 | ----------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Viter Moldy Kesuma            | 251402079 | Langkah 1 — `q00_setup.sql` dan verifikasi lingkungan · Langkah 5 — `lab5_orm.py`, Q16–Q20, Refleksi D · `README.md` · kerangka `laporan.md` | [`0d57034`](https://github.com/vitermoldy/msbd-2026/commit/0d57034e5018fd2f3b3e5b8ffa6d327033260839) · [`ba18fc9`](https://github.com/vitermoldy/msbd-2026/commit/ba18fc926d6576f68628a449f2b6e64fd1628502) · [`994a5c9`](https://github.com/vitermoldy/msbd-2026/commit/994a5c9ecfcdc123d7f4d38a0c010c501a1c8b5d) |
 | Nadine Tantiara Hutagaol      | 251402050 | Langkah 2 — PL/pgSQL dan batas transaksi, `q01`–`q05`, Refleksi A                                                                            | [`51d7b5a`](https://github.com/vitermoldy/msbd-2026/commit/51d7b5a7f41d88b5ccf8402493deab341228bb79) · [`98400f3`](https://github.com/vitermoldy/msbd-2026/commit/98400f3b48155ddd85d3c03e1d0db321bbe0fa86)                                                                                                        |
-| Siti Naifah Batubara          | 251402067 | Langkah 3 — tipe data, `q06`–`q09`, Refleksi B                                                                                               | «belum ada commit»                                                                                                                                                                                                                                                                                                 |
+| Siti Naifah Batubara          | 251402067 | Langkah 3 — tipe data, `q06`–`q09`, Refleksi B                                                                                               | [`41f3aa1`](https://github.com/vitermoldy/msbd-2026/commit/41f3aa1455233e6e46950149b18f07172d50f381)                                                                                                                                                                                                                                                                       |
 | Gideon Finsus Siburian        | 251402038 | Langkah 4 — psycopg 3, `lab5_driver.py`, `q11_uji_injeksi.py`, Q10–Q15, Refleksi C                                                           | «belum ada commit»                                                                                                                                                                                                                                                                                                 |
 | Rizky Cristian Fero Sihombing | 251402056 | Langkah 6 — FastAPI, `lab5_api.py`, Q21–Q24, Refleksi E                                                                                      | «belum ada commit»                                                                                                                                                                                                                                                                                                 |
 
@@ -460,24 +460,186 @@ Informasi teknis dari error asli tidak lagi terlihat pada pesan akhir, seperti n
 
 Penangkapan `foreign_key_violation` layak dilakukan ketika aplikasi membutuhkan pesan error yang lebih sederhana dan mudah dipahami oleh pengguna. Namun, pada tahap pengembangan atau debugging, informasi error asli tetap berguna untuk mengetahui penyebab masalah secara lebih spesifik. Oleh karena itu, penangkapan error sebaiknya digunakan ketika detail teknis dari database memang tidak perlu ditampilkan langsung kepada pengguna.
 
-### Q6 — `q06_domain_positive_amount.sql` · Domain menolak nol dan negatif
+### Q06 - `q06_domain_positive_amount.sql` · Domain menolak nol dan negatif
 
-> «Belum diisi — Naifah.» Cantumkan dua pesan galat beserta SQLSTATE-nya.
+Pada Q06 dilakukan pengujian terhadap domain `lab5.positive_amount` dengan mencoba memasukkan nilai pembayaran `0.00` dan nilai negatif ke `payment_tx`. Pengujian ini dilakukan untuk melihat apakah nilai yang tidak sesuai dengan aturan pada domain akan ditolak oleh database.
 
-### Q7 — `q07_enum_status.sql` · Menambah nilai enum
+**Isi file SQL:**
 
-> «Belum diisi — Naifah.» Cantumkan galat saat mengisi `EXPIRED`, perintah
-> `ALTER TYPE ... ADD VALUE`, dan hasil percobaan ulang.
+```sql
+-- Coba masukkan nilai nol
+INSERT INTO lab5.payment_tx (rental_id, amount) VALUES (1, 0.00);
 
-### Q8 — `q08_tags_array.sql` · Array `tags`
+-- Coba masukkan nilai negatif
+INSERT INTO lab5.payment_tx (rental_id, amount) VALUES (1, -5.00);
+```
 
-> «Belum diisi — Naifah.» Cantumkan `UPDATE` tiga nilai dan hasil pencarian dengan operator
-> array.
+**Perintah menjalankan:**
+
+```text
+.\latihan\p05\q06_domain_positive_amount.sql | docker exec -i msbd-pg psql -U msbd -d latihan
+```
+
+**Galat yang muncul:**
+
+```text
+ERROR:  value for domain lab5.positive_amount violates check constraint "positive_amount_check"
+
+ERROR:  value for domain lab5.positive_amount violates check constraint "positive_amount_check"
+```
+
+Pada percobaan pertama, nilai `0.00` dimasukkan ke kolom `amount` dan menghasilkan error karena nilai tersebut melanggar `positive_amount_check`. Kemudian pada percobaan kedua, nilai `-5.00` juga menghasilkan error yang sama. Ini berarti kedua nilai tersebut ditolak oleh domain `lab5.positive_amount`.
+
+**SQLSTATE:**
+
+```text
+23514
+```
+
+SQLSTATE `23514` menunjukkan bahwa terjadi pelanggaran terhadap check constraint. Dalam pengujian ini, pelanggaran terjadi pada `positive_amount_check` karena nilai `0.00` dan `-5.00` tidak memenuhi ketentuan yang ada pada domain.
+
+**Alasan keputusan:**
+
+Berdasarkan hasil pengujian, domain `lab5.positive_amount` dapat menolak nilai pembayaran yang tidak sesuai. Nilai `0.00` dan `-5.00` tidak berhasil dimasukkan ke `payment_tx` karena keduanya melanggar constraint yang ada pada domain. Dengan begitu, domain ini dapat membantu membatasi nilai `amount` agar tidak diisi dengan nilai nol atau negatif.
+
+
+### Q07 — `q07_enum_status.sql` · Menambah nilai enum
+
+Pada Q07 dilakukan percobaan untuk mengubah status `rental_id = 1` menjadi `EXPIRED`. Percobaan ini dilakukan sebelum dan sesudah `EXPIRED` ditambahkan ke enum `lab5.rental_status`.
+
+**Isi file SQL:**
+
+```sql id="j3n4c7"
+-- 1. Coba set status menjadi EXPIRED
+UPDATE lab5.rental_tx SET status = 'EXPIRED' WHERE rental_id = 1;
+
+-- 2. Tambahkan nilai EXPIRED ke ENUM
+ALTER TYPE lab5.rental_status ADD VALUE 'EXPIRED';
+
+-- 3. Ulangi set status menjadi EXPIRED
+UPDATE lab5.rental_tx SET status = 'EXPIRED' WHERE rental_id = 1;
+
+-- Cek hasilnya
+SELECT rental_id, status FROM lab5.rental_tx WHERE rental_id = 1;
+```
+
+**Perintah menjalankan:**
+
+```text id="vlw6la"
+gc .\latihan\p05\q07_enum_status.sql | docker exec -i msbd-pg psql -U msbd -d latihan
+```
+
+**Galat yang muncul:**
+
+```text id="0m0b4y"
+ERROR:  invalid input value for enum lab5.rental_status: "EXPIRED"
+LINE 1: UPDATE lab5.rental_tx SET status = 'EXPIRED' WHERE rental_id...
+                                      ^
+```
+
+Galat muncul saat `EXPIRED` pertama kali dimasukkan karena nilai tersebut belum ada di enum `lab5.rental_status`. Jadi, PostgreSQL belum bisa menerima `EXPIRED` sebagai status pada saat itu.
+
+**Perintah menambahkan nilai enum:**
+
+```sql id="b1j1xq"
+ALTER TYPE lab5.rental_status ADD VALUE 'EXPIRED';
+```
+
+**Keluaran:**
+
+```text id="r3r3s4"
+ALTER TYPE
+UPDATE 1
+ rental_id | status
+-----------+---------
+         1 | EXPIRED
+(1 row)
+```
+
+Setelah `EXPIRED` ditambahkan ke enum, perintah `UPDATE` dijalankan lagi dan berhasil dengan hasil `UPDATE 1`. Dari hasil `SELECT`, terlihat bahwa status `rental_id = 1` sudah berubah menjadi `EXPIRED`.
+
+**Alasan keputusan:**
+
+Pada percobaan pertama, `EXPIRED` belum ada sebagai nilai pada enum `lab5.rental_status`, sehingga muncul error saat melakukan `UPDATE`. Setelah nilai tersebut ditambahkan menggunakan `ALTER TYPE ... ADD VALUE`, `UPDATE` bisa dijalankan dan status `rental_id = 1` berhasil berubah menjadi `EXPIRED`.
+
+
+### Q08 — `q08_tags_array.sql` · Array `tags`
+
+Pada Q08 dilakukan pengisian data pada kolom `tags` untuk `rental_id = 1`. Kolom tersebut diisi dengan tiga tag, yaitu `promo`, `akhir-pekan`, dan `anggota`. Setelah data berhasil dimasukkan, dilakukan pencarian data yang memiliki tag `promo` menggunakan operator `ANY`.
+
+**Isi file SQL:**
+
+```sql
+UPDATE lab5.rental_tx SET tags = ARRAY['promo','akhir-pekan','anggota'] WHERE rental_id = 1;
+
+SELECT rental_id, tags FROM lab5.rental_tx WHERE 'promo' = ANY(tags);
+```
+
+**Perintah menjalankan:**
+
+```text
+gc .\latihan\p05\q08_tags_array.sql | docker exec -i msbd-pg psql -U msbd -d latihan
+```
+
+**Keluaran:**
+
+```text
+UPDATE 1
+ rental_id |          tags
+-----------+--------------------------
+         1 | {promo,akhir-pekan,anggota}
+(1 row)
+```
+
+Perintah `UPDATE` berhasil dijalankan dan menghasilkan `UPDATE 1`, yang berarti data pada `rental_id = 1` berhasil diperbarui. Kolom `tags` kemudian berisi tiga nilai yang sudah dimasukkan, yaitu `promo`, `akhir-pekan`, dan `anggota`. Perintah `SELECT` digunakan untuk mencari data yang memiliki tag `promo`. Hasilnya menampilkan `rental_id = 1` dengan isi array `{promo,akhir-pekan,anggota}`. Hal ini karena `promo` terdapat di dalam array `tags` pada data tersebut.
+
+**Alasan keputusan:**
+
+Array pada kolom `tags` digunakan karena satu data rental dapat memiliki beberapa tag. Pada pengujian ini, tiga tag dapat dimasukkan sekaligus menggunakan `ARRAY[...]`.
+Operator `ANY` digunakan untuk mengecek apakah nilai `promo` terdapat di dalam array `tags`. Karena `promo` ada di dalam array tersebut, maka `rental_id = 1` berhasil ditemukan.
+Hasil tersebut menunjukkan bahwa beberapa tag dapat disimpan dalam satu kolom `tags`, dan tag tertentu seperti `promo` dapat dicari menggunakan `ANY`.
+
 
 ### Q9 — `q09_metadata_jsonb.sql` · JSONB `metadata`
 
-> «Belum diisi — Naifah.» Cantumkan `UPDATE` JSONB dan hasil pengambilan `channel` dengan
-> operator JSONB.
+Pada Q09 dilakukan pengisian data JSONB pada kolom `metadata` untuk `rental_id = 1`. Data yang dimasukkan terdiri dari `channel` dengan nilai `web` dan `device` dengan nilai `android`. Setelah itu, dilakukan pengecekan untuk mengambil nilai `channel` dari data JSONB tersebut.
+
+**Isi file SQL:**
+
+```sql
+UPDATE lab5.rental_tx SET metadata = '{"channel":"web","device":"android"}'::jsonb WHERE rental_id = 1;
+
+SELECT rental_id, metadata ->> 'channel' AS kanal FROM lab5.rental_tx WHERE rental_id = 1;
+```
+
+**Perintah menjalankan:**
+
+```text
+gc .\latihan\p05\q09_metadata_jsonb.sql | docker exec -i msbd-pg psql -U msbd -d latihan
+```
+
+**Keluaran:**
+
+```text
+UPDATE 1
+ rental_id | kanal
+-----------+-------
+         1 | web
+(1 row)
+```
+
+Perintah `UPDATE` berhasil dijalankan dan menghasilkan `UPDATE 1`, yang berarti data pada `rental_id = 1` berhasil diperbarui. Data yang dimasukkan ke dalam `metadata` berisi `channel` dengan nilai `web` dan `device` dengan nilai `android`.
+
+Selanjutnya, perintah `SELECT` digunakan untuk mengambil nilai dari key `channel`. Operator `->>` digunakan untuk mengambil nilai tersebut dalam bentuk teks. Hasilnya menunjukkan `web`, sesuai dengan data yang sebelumnya dimasukkan.
+
+**Alasan keputusan:**
+
+JSONB digunakan pada kolom `metadata` untuk menyimpan beberapa informasi tambahan dalam satu kolom. Pada pengujian ini, informasi `channel` dan `device` disimpan bersama dalam bentuk JSONB.
+
+Untuk mengambil nilai `channel`, digunakan operator `->>` dengan key `channel`. Hasilnya adalah `web`, sehingga nilai yang disimpan pada JSONB dapat diambil kembali sesuai dengan key yang dipilih.
+
+Hasil tersebut menunjukkan bahwa beberapa informasi dapat disimpan dalam satu kolom `metadata` menggunakan JSONB, dan nilai tertentu seperti `channel` dapat diambil kembali menggunakan operator `->>`.
+
 
 ### Q10 — `lab5_driver.py` · SELECT berparameter
 
@@ -984,7 +1146,10 @@ kelompok membuktikannya dari data?_
 _Pilih `tags` atau `metadata`. Apakah sebaiknya tetap di sana atau dipindahkan menjadi
 tabel? Berikan satu pertanyaan bisnis yang dapat mengubah keputusan tersebut._
 
-> «Belum diisi — Naifah.»
+Saya memilih **tags** untuk tetap disimpan sebagai array. Menurut saya, cara ini masih cukup karena satu rental dapat memiliki beberapa tag sekaligus. Pada Q08 juga tag masih digunakan untuk informasi sederhana dan dapat dicari menggunakan `ANY`, sehingga belum ada kebutuhan untuk membuat tabel khusus untuk menyimpan tag.
+
+Satu pertanyaan bisnis yang dapat mengubah keputusan tersebut adalah: **“Apakah tag nantinya akan sering digunakan untuk membuat laporan atau dikelompokkan berdasarkan jenis tertentu?”** Jika iya, `tags` dapat dipindahkan ke tabel agar setiap tag bisa dikelola dan digunakan dalam pencarian atau laporan dengan lebih mudah.
+
 
 ### Refleksi C — Rollback dari basis data lawan rollback dari Python
 
@@ -1100,7 +1265,14 @@ Penggunaan AI jadi alat bantu di beberapa bagian tugas dan membantu untuk lebih 
 
 Seluruh kode yang digunakan tetap dijalankan dan juga diujikan secara langsung pada database kelompok dengan Docker dan PostgreSQL. Hasil yang dicantumkan dalam laporan berasal dari hasil pengujian yang dilakukan secara nyata pada laptop pribadi dalam pengerjaan tugas, lalu selebihnya mengikuti dan menyesuaikan dengan ketentuan dan arahan yang diberikan dalam tugas.
 
-**Naifah (Langkah 3).** «Belum diisi.»
+**Naifah (Langkah 3).** `Q06 — Domain menolak nol dan negatif`, `Q07 — Menambah nilai enum`, `Q08 — Array tags`, `Q09 — JSONB metadata`, dan `Reflektif B`
+
+Dalam pengerjaan Langkah 3, saya menggunakan AI untuk membantu memahami beberapa materi yang digunakan dalam soal, seperti domain, enum, array, dan JSONB pada PostgreSQL. Selain itu, AI juga membantu saya saat memperbaiki error ketika menjalankan query dan membantu menjelaskan bagian yang masih belum saya pahami.
+
+Saya juga menggunakan AI untuk membantu mengecek penjelasan yang saya buat pada laporan, terutama agar penjelasannya sesuai dengan query dan hasil yang saya dapatkan.
+
+Setiap query pada Q06 sampai Q09 tetap saya jalankan dan uji secara langsung menggunakan database kelompok. Hasil yang dicantumkan dalam laporan juga berasal dari hasil pengujian yang saya lakukan, bukan langsung mengambil hasil dari AI.
+
 
 **Finsus (Langkah 4).** «Belum diisi.»
 

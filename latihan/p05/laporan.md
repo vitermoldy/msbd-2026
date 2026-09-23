@@ -2,17 +2,17 @@
 
 **Dari Procedure sampai Endpoint: PL/pgSQL, psycopg 3, Connection Pool, SQLAlchemy, N+1, FastAPI**
 
-| | |
-|---|---|
-| Mata kuliah | TIF2104 — Manajemen Sistem Basis Data |
-| Pertemuan | 5 — Pemrograman Basis Data |
-| Basis data | Pagila pada PostgreSQL 17, skema kerja `lab5` |
-| Cabang | `latihan/p05-programming` |
-| Repositori | https://github.com/vitermoldy/msbd-2026 |
-| Merge request | «belum dibuka — isi tautan setelah pull request dibuat» |
-| Versi PostgreSQL | PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, 64-bit |
-| Lingkungan Python | Python 3.14 · psycopg 3.2.13 · SQLAlchemy 2.0.54 · FastAPI 0.115.14 |
-| Tanggal pengerjaan | 22 September 2026 – … |
+|                    |                                                                           |
+| ------------------ | ------------------------------------------------------------------------- |
+| Mata kuliah        | TIF2104 — Manajemen Sistem Basis Data                                     |
+| Pertemuan          | 5 — Pemrograman Basis Data                                                |
+| Basis data         | Pagila pada PostgreSQL 17, skema kerja `lab5`                             |
+| Cabang             | `latihan/p05-programming`                                                 |
+| Repositori         | https://github.com/vitermoldy/msbd-2026                                   |
+| Merge request      | «belum dibuka — isi tautan setelah pull request dibuat»                   |
+| Versi PostgreSQL   | PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, 64-bit |
+| Lingkungan Python  | Python 3.14 · psycopg 3.2.13 · SQLAlchemy 2.0.54 · FastAPI 0.115.14       |
+| Tanggal pengerjaan | 22 September 2026 – …                                                     |
 
 > **Status laporan.** Bagian yang sudah terisi dengan keluaran asli: Q0 (setup), Q16–Q20,
 > Refleksi D, dan Ringkasan N+1. Bagian lain ditandai «Belum diisi» beserta penanggung jawab
@@ -25,13 +25,13 @@
 
 ## Anggota dan Kontribusi
 
-| Nama | NIM | Kontribusi | Commit |
-|---|---|---|---|
-| Viter Moldy Kesuma | 251402079 | Langkah 1 — `q00_setup.sql` dan verifikasi lingkungan · Langkah 5 — `lab5_orm.py`, Q16–Q20, Refleksi D · `README.md` · kerangka `laporan.md` | [`0d57034`](https://github.com/vitermoldy/msbd-2026/commit/0d57034e5018fd2f3b3e5b8ffa6d327033260839) · [`ba18fc9`](https://github.com/vitermoldy/msbd-2026/commit/ba18fc926d6576f68628a449f2b6e64fd1628502) · [`994a5c9`](https://github.com/vitermoldy/msbd-2026/commit/994a5c9ecfcdc123d7f4d38a0c010c501a1c8b5d) |
-| Nadine Tantiara Hutagaol | 251402050 | Langkah 2 — PL/pgSQL dan batas transaksi, `q01`–`q05`, Refleksi A | [`51d7b5a`](https://github.com/vitermoldy/msbd-2026/commit/51d7b5a7f41d88b5ccf8402493deab341228bb79) · [`98400f3`](https://github.com/vitermoldy/msbd-2026/commit/98400f3b48155ddd85d3c03e1d0db321bbe0fa86) |
-| Siti Naifah Batubara | 251402067 | Langkah 3 — tipe data, `q06`–`q09`, Refleksi B | «belum ada commit» |
-| Gideon Finsus Siburian | 251402038 | Langkah 4 — psycopg 3, `lab5_driver.py`, `q11_uji_injeksi.py`, Q10–Q15, Refleksi C | «belum ada commit» |
-| Rizky Cristian Fero Sihombing | 251402056 | Langkah 6 — FastAPI, `lab5_api.py`, Q21–Q24, Refleksi E | «belum ada commit» |
+| Nama                          | NIM       | Kontribusi                                                                                                                                   | Commit                                                                                                                                                                                                                                                                                                             |
+| ----------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Viter Moldy Kesuma            | 251402079 | Langkah 1 — `q00_setup.sql` dan verifikasi lingkungan · Langkah 5 — `lab5_orm.py`, Q16–Q20, Refleksi D · `README.md` · kerangka `laporan.md` | [`0d57034`](https://github.com/vitermoldy/msbd-2026/commit/0d57034e5018fd2f3b3e5b8ffa6d327033260839) · [`ba18fc9`](https://github.com/vitermoldy/msbd-2026/commit/ba18fc926d6576f68628a449f2b6e64fd1628502) · [`994a5c9`](https://github.com/vitermoldy/msbd-2026/commit/994a5c9ecfcdc123d7f4d38a0c010c501a1c8b5d) |
+| Nadine Tantiara Hutagaol      | 251402050 | Langkah 2 — PL/pgSQL dan batas transaksi, `q01`–`q05`, Refleksi A                                                                            | [`51d7b5a`](https://github.com/vitermoldy/msbd-2026/commit/51d7b5a7f41d88b5ccf8402493deab341228bb79) · [`98400f3`](https://github.com/vitermoldy/msbd-2026/commit/98400f3b48155ddd85d3c03e1d0db321bbe0fa86)                                                                                                        |
+| Siti Naifah Batubara          | 251402067 | Langkah 3 — tipe data, `q06`–`q09`, Refleksi B                                                                                               | «belum ada commit»                                                                                                                                                                                                                                                                                                 |
+| Gideon Finsus Siburian        | 251402038 | Langkah 4 — psycopg 3, `lab5_driver.py`, `q11_uji_injeksi.py`, Q10–Q15, Refleksi C                                                           | «belum ada commit»                                                                                                                                                                                                                                                                                                 |
+| Rizky Cristian Fero Sihombing | 251402056 | Langkah 6 — FastAPI, `lab5_api.py`, Q21–Q24, Refleksi E                                                                                      | «belum ada commit»                                                                                                                                                                                                                                                                                                 |
 
 Soal mensyaratkan **setiap anggota memiliki commit yang dapat ditelusuri**. Setiap anggota
 menambahkan tautan commit-nya sendiri pada kolom terakhir setelah push.
@@ -60,7 +60,7 @@ Program Python dijalankan dari `latihan/p05` dengan venv aktif dan variabel `DSN
 
 ### Q0 — `q00_setup.sql` · Menyiapkan lingkungan lab
 
-*Penanggung jawab: Viter*
+_Penanggung jawab: Viter_
 
 **Perintah**
 
@@ -109,14 +109,14 @@ CREATE TABLE
 3.2.13 2.0.54 0.115.14
 ```
 
-| Komponen | Versi / nilai |
-|---|---|
-| PostgreSQL | 17.11 |
-| Python | 3.14 |
-| psycopg | 3.2.13 |
-| SQLAlchemy | 2.0.54 |
-| FastAPI | 0.115.14 |
-| Jumlah customer (`pagila`) | 599 |
+| Komponen                   | Versi / nilai |
+| -------------------------- | ------------- |
+| PostgreSQL                 | 17.11         |
+| Python                     | 3.14          |
+| psycopg                    | 3.2.13        |
+| SQLAlchemy                 | 2.0.54        |
+| FastAPI                    | 0.115.14      |
+| Jumlah customer (`pagila`) | 599           |
 
 **Alasan keputusan.** Seluruh percobaan ditempatkan pada skema terpisah `lab5`, dan setup
 diawali `DROP SCHEMA IF EXISTS lab5 CASCADE` supaya dapat diulang dari keadaan bersih tanpa
@@ -177,7 +177,7 @@ Pada Q01 dibuat function `lab5.total_dibayar` untuk menghitung total pembayaran 
 
 **Keluaran:**
 
-     total_dibayar 
+     total_dibayar
     ---------------
               4.99
     (1 row)
@@ -187,7 +187,6 @@ Hasil pemanggilan `SELECT lab5.total_dibayar(1);` adalah `4.99`, sehingga total 
 **Alasan keputusan:**
 
 `LANGUAGE sql` dipilih karena isi function hanya menjalankan satu query SQL untuk menghitung total pembayaran. `STABLE` digunakan karena function hanya membaca data dan tidak mengubah isi dari database. `COALESCE(SUM(amount), 0)` digunakan agar hasilnya menjadi `0` jika suatu `rental_id` belum memiliki pembayaran atau tidak ada pembayaran yang ditemukan, bukan `NULL`.
-
 
 ### Q02 - `q02_process_rental.sql` · Procedure transaksi rental dan pembayaran
 
@@ -209,18 +208,18 @@ Pada Q02 dibuat procedure `lab5.process_rental` untuk memasukkan data rental sek
         RAISE EXCEPTION 'nilai pembayaran harus positif, diterima %', p_amount
         USING ERRCODE = '22003';
     END IF;
-    
+
     INSERT INTO lab5.rental_tx (customer_id, inventory_id, staff_id, metadata)
     VALUES (p_customer_id, p_inventory_id, p_staff_id,
           coalesce(p_metadata, '{}'::jsonb))
     RETURNING rental_id INTO p_rental_id;
-    
+
     INSERT INTO lab5.payment_tx (rental_id, amount)
     VALUES (p_rental_id, p_amount);
-    
+
     END;
     $$;
-    
+
     CALL lab5.process_rental(1, 1, 1, 4.99);
 
     SELECT * FROM lab5.rental_tx;
@@ -233,12 +232,12 @@ Pada Q02 dibuat procedure `lab5.process_rental` untuk memasukkan data rental sek
 
 **Keluaran sebelum:**
 
-     rental_sebelum 
+     rental_sebelum
     ----------------
                   2
     (1 row)
 
-     payment_sebelum 
+     payment_sebelum
     -----------------
                    2
     (1 row)
@@ -251,7 +250,7 @@ Sebelum procedure dipanggil, terdapat `2` baris pada `rental_tx` dan `2` baris p
 
 **Keluaran:**
 
-     p_rental_id 
+     p_rental_id
     -------------
                6
     (1 row)
@@ -264,12 +263,12 @@ Procedure menghasilkan `rental_id` baru yaitu `6`.
 
 **Keluaran sesudah:**
 
-     rental_sesudah 
+     rental_sesudah
     ----------------
                   3
     (1 row)
 
-     payment_sesudah 
+     payment_sesudah
     -----------------
                    3
     (1 row)
@@ -290,7 +289,7 @@ Setelah satu kali `CALL`, jumlah `rental_tx` bertambah dari `2` menjadi `3`, sed
     r.staff_id,
     p.payment_id,
     p.amount
-    
+
     FROM lab5.rental_tx r
     JOIN lab5.payment_tx p
     ON p.rental_id = r.rental_id
@@ -298,8 +297,7 @@ Setelah satu kali `CALL`, jumlah `rental_tx` bertambah dari `2` menjadi `3`, sed
     LIMIT 1;
 ```
 
-
-     rental_id | customer_id | inventory_id | staff_id | payment_id | amount 
+     rental_id | customer_id | inventory_id | staff_id | payment_id | amount
     -----------+-------------+--------------+----------+------------+--------
              6 |           1 |            1 |        1 |          3 |   4.99
     (1 row)
@@ -309,7 +307,6 @@ Hasil join menunjukkan bahwa `rental_id` 6 pada `rental_tx` terhubung dengan `pa
 **Alasan keputusan:**
 
 Procedure dipilih karena salah satu pemanggilan perlu melakukan dua `INSERT` yang saling berkaitan. `INOUT p_rental_id` digunakan untuk mengembalikan ID penyewaan yang baru dibuat. Tidak menggunakan `COMMIT` di dalam procedure karena batas transaksi diserahkan kepada pemanggil.
-
 
 ### Q03 - `q03_exception_amount.sql` · Validasi jumlah pembayaran
 
@@ -321,7 +318,7 @@ Pada Q03 dilakukan pengujian terhadap pembayaran dengan nilai negatif. Procedure
 
 **Keluaran sebelum:**
 
-     rental_sebelum 
+     rental_sebelum
     ----------------
                   3
     (1 row)
@@ -347,7 +344,7 @@ Sebelum pengujian terdapat `3` baris pada `rental_tx`.
 
 **Keluaran sesudah:**
 
-     rental_sesudah 
+     rental_sesudah
     ----------------
                   3
     (1 row)
@@ -357,7 +354,6 @@ Jumlah `rental_tx` tetap `3` sebelum dan sesudah pengujian.
 **Alasan keputusan:**
 
 Jumlah rental tidak bertambah atau tetap 3 terjadi karena procedure memeriksa `p_amount` duluan. Nilai `-4.99` memenuhi kondisi `p_amount <= 0`, sehingga `RAISE EXCEPTION` dijalankan sebelum `INSERT`. Sehingga pemanggil gagal dan jumlah baris tidak bertambah.
-
 
 ### Q04 - `q04_commit_dalam_procedure.sql` · COMMIT di dalam procedure
 
@@ -379,12 +375,12 @@ Pada Q04 diuji penggunaan `COMMIT` di dalam procedure ketika procedure dipanggil
             RAISE EXCEPTION 'nilai pembayaran harus positif, diterima %', p_amount
             USING ERRCODE = '22003';
     END IF;
-    
+
     INSERT INTO lab5.rental_tx (customer_id, inventory_id, staff_id, metadata)
     VALUES (p_customer_id, p_inventory_id, p_staff_id,
           coalesce(p_metadata, '{}'::jsonb))
     RETURNING rental_id INTO p_rental_id;
-    
+
     COMMIT;
         INSERT INTO lab5.payment_tx (rental_id, amount)
         VALUES (p_rental_id, p_amount);
@@ -396,9 +392,9 @@ Pada Q04 diuji penggunaan `COMMIT` di dalam procedure ketika procedure dipanggil
 
 ```python
     import psycopg
-    
+
     DSN = "host=localhost port=5432 dbname=latihan user=msbd password=msbd2026"
-    
+
     try:
     with psycopg.connect(DSN) as conn:
         conn.execute(
@@ -412,7 +408,7 @@ Pada Q04 diuji penggunaan `COMMIT` di dalam procedure ketika procedure dipanggil
             """,
             (1, 1, 1, 4.99),
         )
-        
+
         except psycopg.Error as exc:
             print(f"{type(exc).__name__}: {exc}")
             print(f"SQLSTATE: {exc.sqlstate}")
@@ -428,7 +424,6 @@ Pada Q04 diuji penggunaan `COMMIT` di dalam procedure ketika procedure dipanggil
 Galat tersebut terjadi karena procedure menjalankan `COMMIT`, sedangkan pemanggilannya dilakukan melalui transaksi yang dikelola oleh `psycopg` di dalam `with psycopg.connect(...)`. Akibatnya PostgreSQL menolak penghentian transaksi dari dalam procedure dan menghasilkan `invalid transaction termination` dengan SQLSTATE `2D000`.
 
 Pengujian ini menunjukkan bahwa pengelolaan transaksi perlu ditentukan dengan jelas. Jika transaksi dikelola oleh aplikasi, procedure tidak perlu melakukan `COMMIT` sendiri.
-
 
 ### Q05 - `q05_exception_fk.sql` · Penanganan foreign key violation
 
@@ -518,7 +513,7 @@ Penangkapan `foreign_key_violation` layak dilakukan ketika aplikasi membutuhkan 
 
 ### Q16 — `lab5_orm.py` · Model deklaratif
 
-*Penanggung jawab: Viter*
+_Penanggung jawab: Viter_
 
 ```python
 class Base(DeclarativeBase):
@@ -703,9 +698,9 @@ ORM       : median 3.79 ms (min 3.32, maks 4.32) dari 30 kali
 SQL mentah: median 3.45 ms (min 3.04, maks 4.14) dari 30 kali
 ```
 
-| Versi | Median | Min | Maks |
-|---|---:|---:|---:|
-| ORM | 3,79 ms | 3,32 ms | 4,32 ms |
+| Versi      |  Median |     Min |    Maks |
+| ---------- | ------: | ------: | ------: |
+| ORM        | 3,79 ms | 3,32 ms | 4,32 ms |
 | SQL mentah | 3,45 ms | 3,04 ms | 4,14 ms |
 
 **Cara mengukur.** Setiap versi dijalankan 30 kali setelah satu kali pemanasan, dalam satu
@@ -721,53 +716,72 @@ perbedaan kerja di PostgreSQL.
 
 ### Q21 — `lab5_api.py` · Dependency koneksi `get_conn`
 
-> «Belum diisi — Rizky.» Cantumkan potongan kode dependency bergaya `with` + `yield` yang
-> meminjam koneksi dari pool.
+def get_conn():
+with pool.connection() as conn:
+yield conn
 
 ### Q22 — `POST /rentals` → 201
 
-> «Belum diisi — Rizky.» Cantumkan perintah curl dan respons berisi `rental_id`.
+PS C:\Users\USER\msbd-2026> curl.exe --% -s -i -X POST localhost:8000/rentals -H "content-type: application/json" -d "{\"customer_id\":1,\"inventory_id\":1,\"staff_id\":1,\"amount\":4.99}"
+HTTP/1.1 201 Created
+date: Wed, 23 Sep 2026 12:08:34 GMT
+server: uvicorn
+content-length: 15
+content-type: application/json
+
+{"rental_id":3}
 
 ### Q23 — Nilai negatif → 422
 
-> «Belum diisi — Rizky.» Cantumkan respons utuh (`curl -i`) dan tunjukkan bahwa respons tidak
-> memuat SQL.
+PS C:\Users\USER\msbd-2026> curl.exe --% -s -i -X POST localhost:8000/rentals -H "content-type: application/json" -d "{\"customer_id\":1,\"inventory_id\":1,\"staff_id\":1,\"amount\":-4.99}"
+HTTP/1.1 422 Unprocessable Content
+date: Wed, 23 Sep 2026 12:14:10 GMT
+server: uvicorn
+content-length: 128
+content-type: application/json
+
+{"detail":[{"type":"greater_than","loc":["body","amount"],"msg":"Input should be greater than 0","input":-4.99,"ctx":{"gt":0}}]}
 
 ### Q24 — Inventory tidak ada → 409
 
-> «Belum diisi — Rizky.» Cantumkan respons utuh (`curl -i`).
+PS C:\Users\USER\msbd-2026> curl.exe --% -s -i -X POST localhost:8000/rentals -H "content-type: application/json" -d "{\"customer_id\":1,\"inventory_id\":999999,\"staff_id\":1,\"amount\":4.99}"
+HTTP/1.1 409 Conflict
+date: Wed, 23 Sep 2026 12:14:42 GMT
+server: uvicorn
+content-length: 71
+content-type: application/json
 
----
+{"detail":"Referensi customer, inventory, atau staff tidak ditemukan."}
 
 ## Refleksi A–E
 
 ### Refleksi A — Siapa memulai dan mengakhiri transaksi
 
-*Setelah Q3 dan Q4, siapa yang memulai transaksi, siapa yang mengakhirinya, dan bagaimana
-kelompok membuktikannya dari data?*
+_Setelah Q3 dan Q4, siapa yang memulai transaksi, siapa yang mengakhirinya, dan bagaimana
+kelompok membuktikannya dari data?_
 
 > Setelah Q3 dan Q4, kelompok memahami bahwa transaksi pada procedure sebaiknya dimulai dan diakhiri oleh pemanggil, bukan oleh procedure itu sendiri. Pada Q3, ketika nilai pembayaran -4.99 menyebabkan exception, jumlah data `rental_tx` tetap 3 sehingga tidak ada data baru yang masuk. Hal ini menunjukkan bahwa pemanggilan yang gagal tidak menghasilkan penambahan data.
-Pada Q4, ketika procedure mencoba menjalankan `COMMIT` sendiri saat dipanggil dari Python menggunakan `with psycopg.connect(...)`, muncul galat InvalidTransactionTermination dengan SQLSTATE 2D000. Dari kedua pengujian tersebut dapat dilihat bahwa batas transaksi dikendalikan oleh pemanggil. Data sebelum dan sesudah pemanggilan serta galat pada Q4 menjadi bukti dari hasil pengujian tersebut.
+> Pada Q4, ketika procedure mencoba menjalankan `COMMIT` sendiri saat dipanggil dari Python menggunakan `with psycopg.connect(...)`, muncul galat InvalidTransactionTermination dengan SQLSTATE 2D000. Dari kedua pengujian tersebut dapat dilihat bahwa batas transaksi dikendalikan oleh pemanggil. Data sebelum dan sesudah pemanggilan serta galat pada Q4 menjadi bukti dari hasil pengujian tersebut.
 
 ### Refleksi B — `tags` atau `metadata`: tetap atau menjadi tabel
 
-*Pilih `tags` atau `metadata`. Apakah sebaiknya tetap di sana atau dipindahkan menjadi
-tabel? Berikan satu pertanyaan bisnis yang dapat mengubah keputusan tersebut.*
+_Pilih `tags` atau `metadata`. Apakah sebaiknya tetap di sana atau dipindahkan menjadi
+tabel? Berikan satu pertanyaan bisnis yang dapat mengubah keputusan tersebut._
 
 > «Belum diisi — Naifah.»
 
 ### Refleksi C — Rollback dari basis data lawan rollback dari Python
 
-*Bandingkan rollback Q3 yang dipicu basis data dan Q13 yang dipicu Python. Apa persamaannya,
-dan apa satu hal yang hanya dapat dilakukan sisi aplikasi?*
+_Bandingkan rollback Q3 yang dipicu basis data dan Q13 yang dipicu Python. Apa persamaannya,
+dan apa satu hal yang hanya dapat dilakukan sisi aplikasi?_
 
 > «Belum diisi — Finsus.»
 
 ### Refleksi D — ORM lawan SQL mentah, `joinedload` lawan `selectinload`
 
-*Untuk Q20, versi mana yang dipilih jika kode dibaca ulang tim enam bulan lagi? Dukung
+_Untuk Q20, versi mana yang dipilih jika kode dibaca ulang tim enam bulan lagi? Dukung
 jawaban dengan angka. Sebutkan pula keadaan ketika `joinedload` lebih tepat dari
-`selectinload`.*
+`selectinload`._
 
 **Versi yang dipilih: SQL mentah.** Dari sisi kecepatan, kedua versi praktis setara. Median
 ORM 3,79 ms dan SQL mentah 3,45 ms, selisih 0,34 ms per panggilan, sehingga dibutuhkan
@@ -805,12 +819,12 @@ customer.
 
 ### Refleksi E — Validasi di Pydantic dan di domain basis data
 
-*Untuk nilai negatif, validasi dipasang di Pydantic dan domain basis data. Jelaskan apa yang
-hilang jika salah satunya dihapus, untuk kedua arah.*
+_Untuk nilai negatif, validasi dipasang di Pydantic dan domain basis data. Jelaskan apa yang
+hilang jika salah satunya dihapus, untuk kedua arah._
 
-> «Belum diisi — Rizky.»
+Kalau Field(gt=0) di Pydantic dihapus: request dengan amount negatif akan diteruskan ke database, memicu pelanggaran domain lab5.positive_amount, tertangkap sebagai CheckViolation, dan tetap menghasilkan 422, tapi lebih lambat (round-trip ke database dulu) dan galatnya jadi kurang spesifik (pesan generik "melanggar aturan basis data", bukan nama field yang salah).
 
----
+## Kalau domain lab5.positive_amount di database dihapus: aplikasi jadi satu-satunya penjaga. Ini berbahaya karena siapa pun yang menulis langsung ke database (migrasi manual, skrip admin, aplikasi lain yang nanti ikut memakai database yang sama) tidak lagi tertahan aturan apa pun, data korup bisa masuk tanpa lewat endpoint ini sama sekali. Validasi di aplikasi melindungi satu jalur masuk; constraint di database melindungi semua jalur masuk.
 
 ## Di Mana Aturan Itu Tinggal
 
@@ -823,18 +837,18 @@ hilang jika salah satunya dihapus, untuk kedua arah.*
 > - klien tidak melihat SQL: Q23 dan Q24.
 
 | Aturan | Lapisan | Risiko bila dipindahkan | Bukti |
-|---|---|---|---|
-| | | | |
-| | | | |
-| | | | |
+| ------ | ------- | ----------------------- | ----- |
+|        |         |                         |       |
+|        |         |                         |       |
+|        |         |                         |       |
 
 ---
 
 ## Ringkasan N+1
 
-| Q17 | Q18 | Q19 | Penafsiran |
-|---:|---:|---:|---|
-| 11 | 2 | 1 | Lazy loading = 1 + N: satu SELECT customer ditambah satu SELECT rental untuk setiap customer (N = 10), dan jumlahnya tumbuh linear terhadap N. `selectinload` = 1 + 1: relasi dimuat sekaligus dengan `WHERE customer_id IN (...)`, tetap 2 selama N ≤ 500. `joinedload` = 1 query `LEFT OUTER JOIN` terhadap subquery `LIMIT 10`, tetapi menghasilkan 278 baris untuk 10 customer sehingga perlu `.unique()`. |
+| Q17 | Q18 | Q19 | Penafsiran                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --: | --: | --: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|  11 |   2 |   1 | Lazy loading = 1 + N: satu SELECT customer ditambah satu SELECT rental untuk setiap customer (N = 10), dan jumlahnya tumbuh linear terhadap N. `selectinload` = 1 + 1: relasi dimuat sekaligus dengan `WHERE customer_id IN (...)`, tetap 2 selama N ≤ 500. `joinedload` = 1 query `LEFT OUTER JOIN` terhadap subquery `LIMIT 10`, tetapi menghasilkan 278 baris untuk 10 customer sehingga perlu `.unique()`. |
 
 Sumber: baris `>>> Q17/Q18/Q19` pada `bukti/q17.txt`, `bukti/q18.txt`, dan `bukti/q19.txt`,
 dicocokkan dengan jumlah baris `SELECT` pada log `echo=True` di berkas yang sama.
@@ -870,4 +884,9 @@ Seluruh kode yang digunakan tetap dijalankan dan juga diujikan secara langsung p
 
 **Finsus (Langkah 4).** «Belum diisi.»
 
-**Rizky (Langkah 6).** «Belum diisi.»
+**Rizky (Langkah 6).** `Q21 — `lab5_api.py`· Dependency koneksi`get_conn``, `Q22 — `POST /rentals` → 201`, `Q23 — Nilai negatif → 422`, `Q24 — Inventory tidak ada → 409`
+
+Penggunaan AI jadi alat bantu:
+
+- membantu memahami materi dengan lebih baik seperti request database, set Variabel DSN dan menyiapkan environment dan server yang dibutuhkan
+- Membantu mengatasi error dan mendeteksi kesalahan yang sebelumnya terlewatkan

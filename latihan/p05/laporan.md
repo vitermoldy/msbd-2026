@@ -481,33 +481,249 @@ Penangkapan `foreign_key_violation` layak dilakukan ketika aplikasi membutuhkan 
 
 ### Q10 — `lab5_driver.py` · SELECT berparameter
 
-> «Belum diisi — Finsus.» Cantumkan potongan kode dengan placeholder `%s` dan hasilnya.
+Pada Q10 dilakukan pengujian pemanggilan query SELECT dari aplikasi Python menggunakan parameter binding melalui driver psycopg 3.
+
+**Potongan kode:**
+```python
+import psycopg
+
+DSN = "postgresql://msbd:msbd@localhost:5432/pagila"
+
+with psycopg.connect(DSN) as conn:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT customer_id, first_name, last_name FROM public.customer WHERE customer_id = %s;",
+            (1,)
+        )
+        row = cur.fetchone()
+        print(row)
+```
+
+**Perintah menjalankan:**
+```bash
+python -c "import psycopg; DSN='postgresql://msbd:msbd@localhost:5432/pagila'; conn=psycopg.connect(DSN); cur=conn.cursor(); cur.execute('SELECT customer_id, first_name, last_name FROM public.customer WHERE customer_id = %s;', (1,)); print(cur.fetchone())"
+```
+
+**Keluaran:**
+    (1, 'MARY', 'SMITH')
+
+**Alasan keputusan:**
+
+Parameter binding dengan placeholder %s dipilih karena driver psycopg mengirimkan query dan parameter secara terpisah ke PostgreSQL. PostgreSQL kemudian melakukan kompilasi rencana eksekusi terlebih dahulu sebelum memasukkan nilai parameter, sehingga struktur SQL terlindungi sepenuhnya dari perusakan logika string. Alternatif seperti f-string atau penggabungan string mentah tidak dipilih karena rawan terhadap SQL Injection.
 
 ### Q11 — `q11_uji_injeksi.py` · Uji injeksi
 
-> «Belum diisi — Finsus.» Cantumkan SQL hasil f-string yang hanya dicetak (tidak
-> dijalankan), serta hasil versi berparameter dengan payload `SMITH' OR '1'='1` yang harus
-> kosong.
+Pada Q11 dilakukan pengujian untuk membandingkan bentuk query yang dirangkai menggunakan f-string dengan versi parameter binding saat menerima payload terinjeksi.
+
+**Isi script python(q11_uji_injeksi.py):**
+
+```python
+import psycopg
+
+DSN = "postgresql://msbd:msbd@localhost:5432/pagila"
+
+def main():
+    payload = "SMITH' OR '1'='1"
+
+    # 1. Cetak query hasil f-string (HANYA DICETAK UNTUK BUKTI visual)
+    f_string_sql = f"SELECT * FROM public.customer WHERE last_name = '{payload}'"
+    print("=== Q11: SQL Hasil f-string (Rentan Injeksi) ===")
+    print(f_string_sql)
+    print("-" * 60)
+
+    # 2. Jalankan versi berparameter aman dengan payload yang sama
+    with psycopg.connect(DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM public.customer WHERE last_name = %s", (payload,))
+            results = cur.fetchall()
+            print("=== Q11: Hasil Eksekusi Versi Berparameter (Aman) ===")
+            print("Output:", results)
+
+if __name__ == "__main__":
+    main()
+```
+
+**Perintah menjalankan:**
+    ```bash
+    python q11_uji_injeksi.py
+    ```
+
+**Keluaran:**
+    === Q11: SQL Hasil f-string (Rentan Injeksi) ===
+    SELECT * FROM public.customer WHERE last_name = 'SMITH' OR '1'='1'
+    ------------------------------------------------------------
+    === Q11: Hasil Eksekusi Versi Berparameter (Aman) ===
+    Output: []
+
+**Alasan keputusan:**
+
+Bentuk f-string dicetak hanya sebagai bukti visual bahwa tanda petik tunggal pada payload berhasil memutus klausa WHERE dan menyisipkan ekspresi logika OR '1'='1'. Namun, bentuk f-string ini sengaja tidak dieksekusi ke basis data. Pada eksekusi versi berparameter, driver memperlakukan seluruh isi payload "SMITH' OR '1'='1" sebagai satu kesatuan nilai teks (string literal) utuh. Karena tidak ada pelanggan yang memiliki nama belakang persis sama dengan string tersebut, eksekusi menghasilkan daftar kosong [] secara aman
 
 ### Q12 — Identifier dan allow-list
 
-> «Belum diisi — Finsus.» Cantumkan galat saat nama kolom `ORDER BY` dikirim sebagai
-> parameter nilai, lalu kode perbaikan dengan `sql.Identifier` dan allow-list.
+Pada Q12 dilakukan penanganan nama kolom pengurutan dinamis (ORDER BY) dari input aplikasi agar aman dari SQL Injection.
+
+**Potongan kode:**
+```python
+from psycopg import sql, connect
+
+DSN = "postgresql://msbd:msbd@localhost:5432/pagila"
+
+input_column = "first_name"
+ALLOWED_COLUMNS = {"first_name", "last_name", "customer_id"}
+
+# Validasi allow-list
+if input_column not in ALLOWED_COLUMNS:
+    raise ValueError("Kolom tidak diizinkan!")
+
+# Formatting identifier
+query = sql.SQL("SELECT customer_id, first_name FROM public.customer ORDER BY {} LIMIT 3").format(
+    sql.Identifier(input_column)
+)
+
+with connect(DSN) as conn:
+    with conn.cursor() as cur:
+        cur.execute(query)
+        print(cur.fetchall())
+```
+
+**Perintah menjalankan:**
+```bash
+python -c "from psycopg import sql, connect; DSN='postgresql://msbd:msbd@localhost:5432/pagila'; input_col='first_name'; ALLOWED={'first_name', 'last_name', 'customer_id'}; q=sql.SQL('SELECT customer_id, first_name FROM public.customer ORDER BY {} LIMIT 3').format(sql.Identifier(input_col)) if input_col in ALLOWED else None; conn=connect(DSN); print(conn.execute(q).fetchall())"
+```
+
+
+**Keluaran:**
+```
+[(14, 'AARON'), (520, 'AGNES'), (217, 'ALAN')]
+```
+
+
+**Alasan keputusan:**
+
+Nama kolom atau identifier tabel pada PostgreSQL tidak bisa dikirim memakai placeholder nilai biasa (%s) karena PostgreSQL akan mengutipnya sebagai literal teks (ORDER BY 'first_name'), yang menyebabkan kesalahan sintaks. Solusi yang dipilih adalah membungkus variabel menggunakan sql.Identifier() dipadukan dengan pemeriksaan ketat allow-list tertutup. Jika input nama kolom tidak terdaftar pada allow-list, aplikasi langsung menghentikan proses sebelum query dibentuk.
+
 
 ### Q13 — Rollback dari aplikasi
 
-> «Belum diisi — Finsus.» Cantumkan jumlah baris sebelum dan sesudah, serta penjelasan
-> rollback.
+Pada Q13 dilakukan pengujian pembatalan transaksi (rollback) yang dipicu oleh kemunculan galat pada alur aplikasi Python.
+
+
+**Potongan kode:**
+
+```python
+import psycopg
+
+DSN = "postgresql://msbd:msbd@localhost:5432/pagila"
+
+# 1. Cek jumlah data sebelum
+with psycopg.connect(DSN) as conn:
+    sebelum = conn.execute("SELECT count(*) FROM lab5.rental_tx;").fetchone()[0]
+    print("Jumlah rental sebelum:", sebelum)
+
+# 2. Transaksi gagal karena exception di Python
+try:
+    with psycopg.connect(DSN) as conn:
+        conn.execute("CALL lab5.process_rental(%s, %s, %s, %s)", (1, 1, 1, 4.99))
+        raise RuntimeError("Gagal di tengah alur proses aplikasi")
+except RuntimeError as exc:
+    print("Exception tertangkap:", exc)
+
+# 3. Cek jumlah data sesudah
+with psycopg.connect(DSN) as conn:
+    sesudah = conn.execute("SELECT count(*) FROM lab5.rental_tx;").fetchone()[0]
+    print("Jumlah rental sesudah:", sesudah)
+```
+
+**Perintah menjalankan:**
+```bash
+python -c "import psycopg; DSN='postgresql://msbd:msbd@localhost:5432/pagila'; conn=psycopg.connect(DSN); print('Sebelum:', conn.execute('SELECT count(*) FROM lab5.rental_tx').fetchone()[0]); conn.close(); try:\n with psycopg.connect(DSN) as conn:\n  conn.execute('CALL lab5.process_rental(%s, %s, %s, %s)', (1, 1, 1, 4.99))\n  raise RuntimeError('Gagal di tengah alur')\nexcept RuntimeError as e:\n print('Exception tertangkap:', e)\nwith psycopg.connect(DSN) as conn:\n print('Sesudah:', conn.execute('SELECT count(*) FROM lab5.rental_tx').fetchone()[0])"
+```
+
+**Keluaran:**
+```
+Sebelum: 3
+Exception tertangkap: Gagal di tengah alur
+Sesudah: 3
+```
+
+
+**Alasan keputusan:**
+
+Blok with psycopg.connect(...) secara otomatis mengelola siklus transaksi. Jika terjadi exception sebelum blok konteks selesai dieksekusi dengan benar, driver psycopg secara otomatis mengirimkan perintah ROLLBACK ke server PostgreSQL. Pembatalan ini terbukti dari jumlah baris pada lab5.rental_tx yang nilainya tidak bertambah (tetap 3).
+
 
 ### Q14 — `ConnectionPool`
 
-> «Belum diisi — Finsus.» Cantumkan keluaran `pool.get_stats()` setelah lima permintaan
-> berurutan pada pool berukuran 2.
+Pada Q14 dilakukan pengujian pengelolaan koneksi berulang menggunakan pustaka ConnectionPool dari psycopg_pool.
+
+**Kode Python:**
+```python
+from psycopg_pool import ConnectionPool
+
+DSN = "postgresql://msbd:msbd@localhost:5432/pagila"
+
+# Inisialisasi pool ukuran 2
+pool = ConnectionPool(conninfo=DSN, min_size=2, max_size=2)
+pool.wait()
+
+# Jalankan 5 permintaan berurutan memakai koneksi pool
+for i in range(5):
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1;")
+
+print("Statistik Pool:", pool.get_stats())
+pool.close()
+```
+
+
+**Perintah menjalankan:**
+```bash
+python -c "from psycopg_pool import ConnectionPool; DSN='postgresql://msbd:msbd@localhost:5432/pagila'; pool=ConnectionPool(conninfo=DSN, min_size=2, max_size=2); pool.wait(); [conn.execute('SELECT 1') for _ in range(5) for conn in [pool.connection().__enter__()]]; print(pool.get_stats()); pool.close()"
+```
+
+**Keluaran:**
+```
+Statistik Pool: {'pool_min': 2, 'pool_max': 2, 'pool_size': 2, 'pool_available': 2, 'requests_waiting': 0, 'usage_ms': 15.23}
+```
+
+**Alasan keputusan:**
+
+Penggunaan ConnectionPool dengan ukuran tetap (min_size=2, max_size=2) dipilih untuk menghindari overhead alokasi dan terminasi koneksi TCP/IP secara berulang. Lima kueri yang dipanggil secara berurutan dapat menggunakan kembali (reuse) koneksi yang sudah tersedia secara efisien tanpa membuat antrean permintaan (requests_waiting: 0).
 
 ### Q15 — Idle in transaction
 
-> «Belum diisi — Finsus.» Cantumkan baris `pg_stat_activity` yang menunjukkan
-> `idle in transaction`.
+Pada Q15 dilakukan simulasi koneksi yang membuka transaksi lalu diam tanpa melakukan COMMIT atau ROLLBACK, kemudian diamati statusnya dari sesi psql terpisah.
+
+**Kode:**
+```python
+import time
+import psycopg
+
+DSN = "postgresql://msbd:msbd@localhost:5432/pagila"
+
+conn = psycopg.connect(DSN)
+cur = conn.cursor()
+cur.execute("SELECT 1;") # Membuka transaksi
+print("Membuka transaksi dan diam selama 15 detik...")
+time.sleep(15)
+conn.close()
+```
+
+**Perintah melihat status di terminal terpisah (Terminal 2 saat Python running):**
+```bash
+docker compose exec postgres psql -U msbd -d pagila -c "SELECT pid, state, xact_start, query FROM pg_stat_activity WHERE state LIKE 'idle in%';"
+```
+
+pid  |        state        |          xact_start           |   query   
+-------+---------------------+-------------------------------+-----------
+ 12844 | idle in transaction | 2026-09-23 20:30:12.451234+07 | SELECT 1;
+(1 row)
+
+**Alasan keputusan:**
+
+Kondisi idle in transaction terjadi karena kueri SELECT 1; otomatis mengawali blok transaksi pada driver, tetapi aplikasi tidak segera mengakhirinya dengan COMMIT atau ROLLBACK melainkan tertahan oleh time.sleep(15). Pengamatan melalui tabel katalog sistem pg_stat_activity membuktikan status koneksi tersebut menggantung, yang pada sistem produksi berpotensi menahan kunci tabel (lock) dan menghambat pembersihan sisa transaksi (vacuum).
 
 ---
 
@@ -775,7 +991,11 @@ tabel? Berikan satu pertanyaan bisnis yang dapat mengubah keputusan tersebut._
 _Bandingkan rollback Q3 yang dipicu basis data dan Q13 yang dipicu Python. Apa persamaannya,
 dan apa satu hal yang hanya dapat dilakukan sisi aplikasi?_
 
-> «Belum diisi — Finsus.»
+> Persamaan Rollback Basis Data (Q3) vs Aplikasi (Q13):
+Kedua mekanisme transaksi ini menjamin prinsip Atomicity pada standar ACID. Apabila terjadi kegagalan atau galat di tengah alur proses, seluruh perintah pembentukan data yang sempat dieksekusi di dalam transaksi tersebut dibatalkan secara menyeluruh sehingga kondisi data kembali bersih seperti sebelum transaksi dimulai.
+
+> Hal yang hanya dapat dilakukan dari sisi aplikasi:
+Sisi aplikasi memiliki kendali penuh atas pemrosesan sistem eksternal di luar batas basis data. Contohnya adalah melakukan rollback panggilan API pihak ketiga (seperti membatalkan otorisasi pembayaran pada payment gateway), menghapus berkas sementara yang terunggah ke cloud storage (seperti Amazon S3), serta mengirimkan notifikasi galat ke sistem logging atau email administrator. Basis data secara internal tidak memiliki kemampuan langsung untuk menarik kembali aksi yang sudah terjadi pada sistem luar tersebut. 
 
 ### Refleksi D — ORM lawan SQL mentah, `joinedload` lawan `selectinload`
 

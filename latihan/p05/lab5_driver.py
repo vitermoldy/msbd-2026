@@ -1,3 +1,7 @@
+# Diminta: membuat driver aplikasi untuk pengujian SELECT berparameter, penanganan identifier dynamic, rollback otomatis, connection pool, dan status idle in transaction.
+# Dipilih: menggunakan psycopg 3 dengan placeholder %s, sql.Identifier dengan allow-list, context manager connection, dan ConnectionPool.
+# Alternatif: penggabungan string langsung (string concatenation); tidak dipilih karena rawan SQL injection dan syntax error pada pengurutan kolom.
+
 import time
 from psycopg import sql, connect
 from psycopg_pool import ConnectionPool

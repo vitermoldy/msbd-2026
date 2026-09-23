@@ -1,3 +1,9 @@
+# Diminta: membuktikan keamanan query berparameter dibanding f-string saat menerima payload injeksi.
+# Dipilih: mencetak bentuk f-string tanpa mengeksekusinya, lalu mengeksekusi versi berparameter dengan %s untuk membuktikan hasilnya kosong.
+# Alternatif: mengeksekusi versi f-string secara langsung; tidak dipilih karena dapat mengeksekusi perintah terinjeksi yang berbahaya pada basis data.
+
+import psycopg
+
 import psycopg
 
 DSN = "dbname=postgres user=postgres password=postgres host=localhost port=5432"

@@ -1,0 +1,11 @@
+latihan=# SELECT pg_size_pretty(pg_relation_size('lab6.ev_salah_idx'));
+ pg_size_pretty 
+----------------
+ 60 MB
+(1 row)
+
+latihan=# SELECT pg_size_pretty(pg_relation_size('lab6.ev_benar_idx'));
+ pg_size_pretty 
+----------------
+ 60 MB
+(1 row)

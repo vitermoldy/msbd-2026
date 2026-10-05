@@ -3,3 +3,4 @@ dump/
 .env
 .DS_Store
 /buat_berkas_p06.py
+/Claude outputs/

@@ -2,5 +2,10 @@ dump/
 *.dump
 .env
 .DS_Store
+<<<<<<< HEAD
 .venv/
 __pycache__/
+=======
+/buat_berkas_p06.py
+/Claude outputs/
+>>>>>>> acdf8250ab505e959f78665f7204f696a6900bf5

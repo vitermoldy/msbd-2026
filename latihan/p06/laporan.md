@@ -324,57 +324,388 @@ berubah?*
 
 ### Langkah 5 · GIN dan BRIN
 
-**Q17 · GIN untuk JSONB.** Berkas: `q17_gin_jsonb.sql`. Apakah GIN dipakai, dan bagaimana
-ukurannya dibanding heap?
+**Q17 · GIN untuk JSONB.** Berkas: `q17_gin_jsonb.sql`. Apakah GIN dipakai, dan bagaimana ukurannya dibanding heap?
 
-> «Belum diisi.»
+**Kode**
+
+```sql
+-- 1. Buat Indeks GIN pada kolom payload
+
+CREATE INDEX IF NOT EXISTS idx_gin_payload ON lab6.event_log USING gin (payload jsonb_path_ops);
+
+-- 2. Uji Query JSONB dengan GIN 3x
+
+EXPLAIN (ANALYZE, BUFFERS)
+
+SELECT * FROM lab6.event_log WHERE payload @> '{"promo": true}';
+
+-- 3. Cek Ukuran Indeks GIN vs Heap
+
+SELECT 
+
+    pg_size_pretty(pg_relation_size('idx_gin_payload')) AS ukuran_gin_payload,
+
+    pg_size_pretty(pg_relation_size('lab6.event_log')) AS ukuran_heap;
+```
+
+**Output**
+
+```text
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=719.88..63388.07 rows=78139 width=194) (actual time=39.836..1541.156 rows=80000 loops=1)
+   Recheck Cond: (payload @> '{"promo": true}'::jsonb)
+   Heap Blocks: exact=58566
+   Buffers: shared hit=2 read=58585 written=4341
+   ->  Bitmap Index Scan on idx_gin_payload  (cost=0.00..700.34 rows=78139 width=0) (actual time=27.800..27.801 rows=80000 loops=1)
+         Index Cond: (payload @> '{"promo": true}'::jsonb)
+         Buffers: shared hit=2 read=19
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.328 ms
+ Execution Time: 1548.401 ms
+(11 rows)
+
+ ukuran_gin_payload | ukuran_heap 
+--------------------+-------------
+ 7096 kB            | 458 MB
+(1 row)
+```
+
+**Penjelasan**
+
+GIN (Generalized Inverted Index) di sini memang digunakan oleh optimizer. Pada hasil query plan terlihat `Bitmap Index Scan on idx_gin_payload`, lalu hasilnya digunakan pada `Bitmap Heap Scan`. GIN cocok digunakan untuk operator `@>` pada JSONB karena dapat membantu pencarian berdasarkan isi JSONB.
+
+Dari hasil pengukuran, query menghasilkan 80.000 baris dengan waktu eksekusi 1548,401 ms. `Bitmap Index Scan` hanya membaca 19 blok, tetapi `Bitmap Heap Scan` membaca 58.566 blok heap karena banyak baris yang memenuhi kondisi. Ukuran GIN adalah **7.096 kB**, sedangkan heap **458 MB**, sehingga ukuran GIN hanya sekitar **1,5% dari ukuran heap**.
+
+    
 
 **Q18 · GIN untuk array.** Berkas: `q18_gin_array.sql`. Bandingkan rencana dengan dan tanpa GIN.
 
-> «Belum diisi.»
+**Query:**
+
+```sql
+DROP INDEX IF EXISTS lab6.idx_btree_terjadi;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log 
+WHERE terjadi_pada >= '2024-05-01 00:00+07' 
+  AND terjadi_pada < '2024-05-08 00:00+07';
+
+-- Menguji Performa B-Tree (Buat B-Tree kembali)
+
+CREATE INDEX idx_btree_terjadi ON lab6.event_log (terjadi_pada);
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log 
+WHERE terjadi_pada >= '2024-05-01 00:00+07' 
+  AND terjadi_pada < '2024-05-08 00:00+07';
+```
+
+Query dijalankan tiga kali pada masing-masing kondisi.
+
+**Hasil dengan GIN:**
+
+| Percobaan    | Execution Time |
+| ------------ | -------------: |
+| 1            |     533,895 ms |
+| 2            |     321,077 ms |
+| 3            |     297,229 ms |
+| **Tercepat** | **297,229 ms** |
+| **Median**   | **321,077 ms** |
+
+Dengan GIN, rencana yang digunakan adalah `Bitmap Index Scan` pada `idx_gin_tags` yang dilanjutkan dengan `Bitmap Heap Scan`. Jadi PostgreSQL menggunakan index untuk menemukan baris yang sesuai dengan kondisi `tags @> ARRAY['kanal:1']`, kemudian mengambil baris tersebut dari heap.
+
+**Hasil tanpa GIN:**
+
+| Percobaan    | Execution Time |
+| ------------ | -------------: |
+| 1            |     582,267 ms |
+| 2            |     595,805 ms |
+| 3            |     531,721 ms |
+| **Tercepat** | **531,721 ms** |
+| **Median**   | **582,267 ms** |
+
+Setelah penggunaan index dimatikan, rencana berubah menjadi `Seq Scan`. Pada kondisi ini PostgreSQL tidak lagi mencari melalui `idx_gin_tags`, tetapi membaca tabel dan memeriksa setiap baris untuk menemukan `tags` yang sesuai.
+
+| Kondisi    | Node                                 |       Tercepat |         Median | Buffers               |
+| ---------- | ------------------------------------ | -------------: | -------------: | --------------------- |
+| Dengan GIN | Bitmap Heap Scan → Bitmap Index Scan | **297,229 ms** | **321,077 ms** | hit=1, read=58641     |
+| Tanpa GIN  | Seq Scan                             | **531,721 ms** | **582,267 ms** | hit=16344, read=42222 |
+
+Dari perbandingan tersebut, penggunaan GIN memberikan waktu yang lebih cepat. Median dengan GIN adalah **321,077 ms**, sedangkan tanpa GIN **582,267 ms**, dengan selisih **261,190 ms**. Jadi, pada query ini GIN masih lebih menguntungkan dibandingkan membaca seluruh tabel dengan `Seq Scan`.
+
+
 
 **Q19 · Correlation dan ukuran.** Berkas: `q19_brin_vs_btree.sql`. Cantumkan `correlation`
 `terjadi_pada` dari `pg_stats` dan ukuran BRIN dibanding B-Tree pada kolom yang sama.
 
-> «Belum diisi.»
+
+**Query:**
+
+```sql
+-- 1. Buat B-Tree pembanding di kolom yang sama (terjadi_pada)
+
+CREATE INDEX IF NOT EXISTS idx_btree_terjadi
+ON lab6.event_log (terjadi_pada);
+
+-- 2. Periksa nilai correlation kolom terjadi_pada di pg_stats
+
+SELECT tablename, attname, correlation
+FROM pg_stats
+WHERE tablename = 'event_log'
+  AND attname = 'terjadi_pada';
+
+-- 3. Bandingkan ukuran indeks BRIN vs B-Tree
+
+SELECT
+    pg_size_pretty(pg_relation_size('lab6.idx_brin_terjadi')) AS ukuran_brin,
+    pg_size_pretty(pg_relation_size('lab6.idx_btree_terjadi')) AS ukuran_btree;
+```
+
+**Hasil:**
+
+```text
+ tablename |   attname    | correlation
+-----------+--------------+-------------
+ event_log | terjadi_pada | 1
+```
+
+```text
+ ukuran_brin | ukuran_btree
+-------------+--------------
+ 32 kB       | 43 MB
+```
+
+Nilai `correlation` pada `terjadi_pada` adalah **1**, yang berarti urutan nilai pada kolom tersebut sangat sesuai dengan urutan fisik data di tabel. Kondisi ini membuat BRIN cocok digunakan karena BRIN bekerja berdasarkan rentang halaman data.
+
+Ukuran BRIN hanya **32 kB**, sedangkan B-Tree mencapai **43 MB**. Perbedaannya sangat besar karena BRIN tidak menyimpan setiap baris secara langsung seperti B-Tree, tetapi menyimpan informasi untuk rentang halaman. Jadi, pada kolom `terjadi_pada` yang memiliki correlation sangat tinggi, BRIN dapat memberikan penghematan ruang yang jauh lebih besar.
+
+
 
 **Q20 · Rentang tujuh hari.** Berkas: `q20_brin_rentang.sql`. Catat pemenang dan selisih Buffers.
 
-| Index | Node | Tercepat | Median | Buffers | Ukuran index |
-|---|---|---:|---:|---:|---:|
-| BRIN | | | | | |
-| B-Tree | | | | | |
+**Query:**
+
+```sql
+-- 1. Uji BRIN
+
+DROP INDEX IF EXISTS lab6.idx_btree_terjadi;
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log 
+WHERE terjadi_pada >= '2024-05-01 00:00+07' 
+  AND terjadi_pada < '2024-05-08 00:00+07';
+
+
+-- 2. Buat B-Tree
+
+CREATE INDEX idx_btree_terjadi
+ON lab6.event_log (terjadi_pada);
+
+-- 3. Uji B-Tree
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log 
+WHERE terjadi_pada >= '2024-05-01 00:00+07' 
+  AND terjadi_pada < '2024-05-08 00:00+07';
+```
+
+Masing-masing kondisi dijalankan sebanyak tiga kali.
+
+**Hasil pengukuran:**
+
+| Index  | Node                                 |      Tercepat |        Median | Buffers          | Ukuran Index |
+| ------ | ------------------------------------ | ------------: | ------------: | ---------------- | -----------: |
+| BRIN   | Bitmap Heap Scan → Bitmap Index Scan | **11,276 ms** | **13,864 ms** | hit=1417, read=1 |    **32 kB** |
+| B-Tree | Index Scan                           | **11,189 ms** | **11,342 ms** | hit=1678         |    **43 MB** |
+
+Pada BRIN, PostgreSQL menggunakan `Bitmap Index Scan` pada `idx_brin_terjadi`, kemudian mengambil data melalui `Bitmap Heap Scan`. Waktu tercepatnya **11,276 ms** dengan median **13,864 ms**.
+
+Pada B-Tree, PostgreSQL langsung menggunakan `Index Scan` pada `idx_btree_terjadi`. Waktu tercepatnya **11,189 ms** dan median **11,342 ms**. Jadi, dari sisi waktu, B-Tree sedikit lebih cepat. Selisih median keduanya hanya sekitar **2,522 ms**.
+
+Perbedaannya lebih terlihat pada ukuran index. BRIN hanya berukuran **32 kB**, sedangkan B-Tree berukuran **43 MB**. Jadi, untuk query rentang tujuh hari ini, B-Tree memberikan waktu yang sedikit lebih cepat, tetapi BRIN membutuhkan ruang penyimpanan yang jauh lebih kecil.
+
 
 **Q21 · Reflektif.** *Kapan penghematan ukuran BRIN sepadan dengan selisih waktunya?*
 
-> «Belum diisi.»
+Menurut hasil pengujian, penghematan ukuran BRIN sudah sepadan dengan selisih waktunya. BRIN memang sedikit lebih lambat, dengan median **13,864 ms**, sedangkan B-Tree **11,342 ms**, sehingga selisihnya hanya **2,522 ms**. Namun, ukuran index-nya berbeda sangat jauh, yaitu BRIN hanya **32 kB**, sedangkan B-Tree **43 MB**. Artinya, dengan selisih waktu yang kecil, BRIN bisa menghemat ruang penyimpanan yang cukup besar. Jadi, kalau query tidak dituntut harus secepat mungkin dan ukuran index juga perlu diperhatikan, BRIN masih menjadi pilihan yang masuk akal. Apalagi pada data `terjadi_pada`, nilai correlation-nya **1**, sehingga kondisi datanya memang cocok untuk penggunaan BRIN.
+
 
 ### Langkah 6 · Statistik, selektivitas, dan Seq Scan
 
 **Q22 · Rencana per status.** Berkas: `q22_index_status.sql`. Salin rencana untuk `SUKSES` dan
 `GAGAL`.
 
-> «Belum diisi.»
+**Query:**
+
+```sql
+-- 1. Buat Indeks pada Kolom Status
+
+CREATE INDEX IF NOT EXISTS idx_status ON lab6.event_log (status);
+
+-- 2. Uji Status SUKSES
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE status = 'SUKSES';
+
+-- 3. Uji Status GAGAL
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE status = 'GAGAL';
+```
+
+Query untuk masing-masing status dijalankan sebanyak tiga kali.
+
+**Hasil Status SUKSES:**
+
+| Percobaan    | Plan     | Execution Time |
+| ------------ | -------- | -------------: |
+| 1            | Seq Scan |     593,562 ms |
+| 2            | Seq Scan |     319,486 ms |
+| 3            | Seq Scan |     361,549 ms |
+| **Tercepat** |          | **319,486 ms** |
+| **Median**   |          | **361,549 ms** |
+
+Pada `SUKSES`, PostgreSQL tetap menggunakan **Seq Scan**, walaupun `idx_status` sudah dibuat. Query menghasilkan **1.680.000 baris**, sedangkan yang tidak memenuhi kondisi hanya **320.000 baris**. Karena sebagian besar isi tabel adalah `SUKSES`, penggunaan Seq Scan lebih dipilih daripada mengambil sebagian besar baris melalui index.
+
+**Hasil Status GAGAL:**
+
+| Percobaan    | Plan        | Execution Time |
+| ------------ | ----------- | -------------: |
+| 1            | Index Scan  |     138,654 ms |
+| 2            | Index Scan  |    2141,239 ms |
+| 3            | Index Scan  |     108,216 ms |
+| **Tercepat** |             | **108,216 ms** |
+| **Median**   |             | **138,654 ms** |
+
+Pada `GAGAL`, PostgreSQL menggunakan **Index Scan** melalui `ev_gagal_idx`. Hasil query hanya **40.000 baris**, sehingga index lebih membantu dibandingkan membaca seluruh tabel. Berbeda dengan `SUKSES`, jumlah data `GAGAL` hanya sekitar **2%** dari seluruh baris.
+
+Dari kedua hasil tersebut terlihat bahwa jumlah baris yang memenuhi kondisi ikut memengaruhi pilihan plan. `SUKSES` yang memiliki jumlah baris sangat banyak menggunakan **Seq Scan**, sedangkan `GAGAL` yang jumlahnya sedikit menggunakan **Index Scan**.
+
 
 **Q23 · Titik peralihan.** Berkas: `q23_selektivitas.sql`. Cantumkan fraksi tiap status dan
 fraksi tempat optimizer berpindah dari Index Scan ke Seq Scan.
 
-> «Belum diisi.»
+**Query:**
+
+```sql
+SELECT 
+    status, 
+    COUNT(*) AS jumlah,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS persentase
+FROM lab6.event_log
+GROUP BY status;
+```
+
+**Hasil:**
+
+| Status   |    Jumlah | Persentase |
+| -------- | --------: | ---------: |
+| GAGAL    |    40.000 |      2,00% |
+| SUKSES   | 1.680.000 |     84,00% |
+| TERTUNDA |   280.000 |     14,00% |
+
+Pada `GAGAL` yang hanya mencakup **2%** dari seluruh data, PostgreSQL memilih **Index Scan**. Ketika jumlah data yang dicari lebih besar, seperti `TERTUNDA` sebesar **14%**, plan yang digunakan berubah menjadi **Bitmap Scan**. Sedangkan `SUKSES` yang mencakup **84%** data menggunakan **Seq Scan**. Jadi, berdasarkan data yang diuji, titik peralihan menuju Seq Scan berada di antara fraksi **14% dan 84%**. 
+
 
 **Q24 · `random_page_cost = 1.1`.** Berkas: `q24_random_page_cost.sql`. Jelaskan pergeseran
 titik peralihan, dan buktikan `RESET` sudah dijalankan.
 
-> «Belum diisi.»
+**Query:**
+
+```sql
+-- 1. Ubah parameter random_page_cost
+
+SET random_page_cost = 1.1;
+
+-- 2. Uji ulang query status SUKSES
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE status = 'SUKSES';
+
+-- 3. Kembalikan ke konfigurasi default
+
+RESET random_page_cost;
+```
+
+Query `SUKSES` dijalankan sebanyak tiga kali dengan `random_page_cost = 1.1`.
+
+**Hasil:**
+
+| Percobaan    | Plan     | Execution Time |
+| ------------ | -------- | -------------: |
+| 1            | Seq Scan |     590,847 ms |
+| 2            | Seq Scan |     498,867 ms |
+| 3            | Seq Scan |     341,589 ms |
+| **Tercepat** |          | **341,589 ms** |
+| **Median**   |          | **498,867 ms** |
+
+Walaupun `random_page_cost` diturunkan menjadi **1.1**, PostgreSQL tetap memilih **Seq Scan** untuk `SUKSES`. Hal ini karena `SUKSES` mencakup **84%** dari seluruh data, sehingga membaca tabel secara langsung masih dianggap lebih efisien daripada menggunakan index.
+
+Penurunan `random_page_cost` pada pengujian ini belum cukup untuk membuat PostgreSQL berpindah dari `Seq Scan` ke penggunaan index. Setelah pengujian selesai, nilai `random_page_cost` dikembalikan dengan `RESET`.
 
 **Q25 · Extended statistics.** Berkas: `q25_extended_statistics.sql`. Bandingkan estimasi baris
 dengan kenyataan, sebelum dan sesudah `ANALYZE`.
 
-> «Belum diisi.»
+**Query:**
+
+```sql
+-- 1. Cek estimasi baris SEBELUM extended statistics
+
+EXPLAIN ANALYZE
+SELECT * FROM lab6.event_log WHERE wilayah = 'SUMUT' AND kota = 'MEDAN';
+
+-- 2. Buat extended statistics untuk korelasi kolom wilayah dan kota
+
+CREATE STATISTICS IF NOT EXISTS stat_wilayah_kota (dependencies, ndistinct)
+ON wilayah, kota FROM lab6.event_log;
+
+-- 3. Perbarui statistik tabel
+
+ANALYZE lab6.event_log;
+
+-- 4. Cek estimasi baris SESUDAH extended statistics
+
+EXPLAIN ANALYZE
+SELECT * FROM lab6.event_log WHERE wilayah = 'SUMUT' AND kota = 'MEDAN';
+```
+
+**Hasil sebelum extended statistics:**
+
+```text
+(cost=1000.00..72066.10 rows=1 width=194)
+(actual time=353.324..356.207 rows=0 loops=1)
+```
+
+Estimasi PostgreSQL adalah **1 baris**, sedangkan jumlah baris yang benar-benar ditemukan adalah **0 baris**.
+
+**Hasil sesudah extended statistics:**
+
+```text
+(cost=1000.00..72066.99 rows=1 width=194)
+(actual time=75.613..77.872 rows=0 loops=1)
+```
+
+Setelah `ANALYZE`, estimasi tetap **1 baris** dan hasil aktual tetap **0 baris**.
+
+| Kondisi                     | Estimasi Baris | Baris Aktual |
+| --------------------------- | -------------: | -----------: |
+| Sebelum extended statistics |              1 |            0 |
+| Sesudah extended statistics |              1 |            0 |
+
+Pada pengujian ini, extended statistics belum mengubah estimasi jumlah baris. PostgreSQL tetap memperkirakan 1 baris, padahal tidak ada baris yang memenuhi kondisi `wilayah = 'SUMUT'` dan `kota = 'MEDAN'`.
+
 
 **Q26 · Reflektif.** *Pilih satu status untuk index dan satu untuk Seq Scan; jelaskan mengapa
 titik peralihannya bukan angka tetap.*
 
-> «Belum diisi.»
+### Q26 · Reflektif
+
+Status GAGAL digunakan sebagai contoh status yang memakai Index Scan, sedangkan SUKSES menggunakan Seq Scan. Pada GAGAL, hanya ada 40.000 baris atau 2% dari total 2.000.000 baris, sehingga PostgreSQL cukup mengambil sebagian kecil data melalui index. Sementara itu, SUKSES mencakup 1.680.000 baris atau 84% dari seluruh data. Karena data yang harus diambil sangat banyak, PostgreSQL memilih membaca tabel secara langsung dengan Seq Scan.
+
+Titik peralihannya tidak bisa ditentukan sebagai satu angka yang selalu sama. Misalnya, dari hasil pengujian kita, 2% masih menggunakan Index Scan, sedangkan 84% sudah menggunakan Seq Scan. Di antara kedua kondisi itu, PostgreSQL bisa saja memilih plan yang berbeda, seperti Bitmap Scan pada TERTUNDA yang jumlahnya 14%. Pilihan tersebut tergantung pada perkiraan biaya membaca data, kondisi tabel, statistik, dan pengaturan database.
+
 
 ### Langkah 7 · Harga tulis dan rekomendasi
 

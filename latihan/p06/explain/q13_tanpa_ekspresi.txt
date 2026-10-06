@@ -1,0 +1,48 @@
+test 1
+
+pagila=# EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE email = 'user1954290@contoh.ac.id';
+                                                 QUERY PLAN
+-------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83568.00 rows=1 width=194) (actual time=897.086..925.289 rows=1 loops=1)
+   Filter: (email = 'user1954290@contoh.ac.id'::text)
+   Rows Removed by Filter: 1999999
+   Buffers: shared hit=674 read=57894
+ Planning Time: 0.196 ms
+ Execution Time: 925.344 ms
+(6 rows)
+
+
+test 2
+
+Time: 926.335 ms
+pagila=# EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE email = 'user1954290@contoh.ac.id';
+                                                 QUERY PLAN
+-------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83568.00 rows=1 width=194) (actual time=306.088..311.204 rows=1 loops=1)
+   Filter: (email = 'user1954290@contoh.ac.id'::text)
+   Rows Removed by Filter: 1999999
+   Buffers: shared hit=706 read=57862
+ Planning Time: 0.149 ms
+ Execution Time: 311.223 ms
+(6 rows)
+
+Time: 311.972 ms
+
+
+test 3
+
+pagila=# EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE email = 'user1954290@contoh.ac.id';
+                                                 QUERY PLAN
+-------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83568.00 rows=1 width=194) (actual time=197.022..200.981 rows=1 loops=1)
+   Filter: (email = 'user1954290@contoh.ac.id'::text)
+   Rows Removed by Filter: 1999999
+   Buffers: shared hit=738 read=57830
+ Planning Time: 0.082 ms
+ Execution Time: 201.000 ms
+(6 rows)
+
+Time: 201.421 ms

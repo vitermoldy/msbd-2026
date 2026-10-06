@@ -1,0 +1,72 @@
+pagila=# SELECT pg_size_pretty(pg_relation_size('lab6.ev_cover_idx'));
+ pg_size_pretty
+----------------
+ 77 MB
+(1 row)
+
+
+pagila=# DROP INDEX IF EXISTS lab6.ev_cover_idx;
+DROP INDEX
+Time: 29.063 ms
+pagila=# CREATE INDEX ev_cover3_idx
+    ON lab6.event_log (customer_id, terjadi_pada, jumlah);
+CREATE INDEX
+Time: 2081.316 ms (00:02.081)
+pagila=# SELECT
+    'ev_cover3_idx (3 kolom biasa)' AS nama_index,
+    pg_size_pretty(pg_relation_size('lab6.ev_cover3_idx')) AS ukuran,
+    pg_relation_size('lab6.ev_cover3_idx') AS ukuran_byte;
+          nama_index           | ukuran | ukuran_byte
+-------------------------------+--------+-------------
+ ev_cover3_idx (3 kolom biasa) | 77 MB  |    81133568
+(1 row)
+
+Time: 1.931 ms
+pagila=# EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah
+FROM lab6.event_log
+WHERE customer_id = 4211;
+                                                           QUERY PLAN
+---------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover3_idx on event_log  (cost=0.43..5.04 rows=35 width=14) (actual time=0.085..0.122 rows=38 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 0
+   Buffers: shared hit=2 read=3
+ Planning:
+   Buffers: shared hit=5 read=1
+ Planning Time: 0.680 ms
+ Execution Time: 0.257 ms
+(8 rows)
+
+Time: 1.926 ms
+pagila=# EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah
+FROM lab6.event_log
+WHERE customer_id = 4211;
+                                                           QUERY PLAN
+---------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover3_idx on event_log  (cost=0.43..5.04 rows=35 width=14) (actual time=0.025..0.034 rows=38 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 0
+   Buffers: shared hit=5
+ Planning Time: 0.100 ms
+ Execution Time: 0.054 ms
+(6 rows)
+
+Time: 0.514 ms
+pagila=# EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah
+FROM lab6.event_log
+WHERE customer_id = 4211;
+                                                           QUERY PLAN
+---------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover3_idx on event_log  (cost=0.43..5.04 rows=35 width=14) (actual time=0.024..0.033 rows=38 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 0
+   Buffers: shared hit=5
+ Planning Time: 0.092 ms
+ Execution Time: 0.052 ms
+(6 rows)
+
+Time: 0.726 ms
+pagila=#

@@ -1,0 +1,48 @@
+test 1
+
+pagila=# EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE lower(email) = lower('user1954290@contoh.ac.id');
+                                                           QUERY PLAN
+--------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ev_email_lower_idx on event_log  (cost=0.43..8.45 rows=1 width=194) (actual time=0.359..0.375 rows=1 loops=1)
+   Index Cond: (lower(email) = 'user1954290@contoh.ac.id'::text)
+   Buffers: shared hit=4
+ Planning:
+   Buffers: shared hit=37 dirtied=5
+ Planning Time: 3.251 ms
+ Execution Time: 0.654 ms
+(7 rows)
+
+Time: 7.052 ms
+
+
+test 2
+
+pagila=# EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE lower(email) = lower('user1954290@contoh.ac.id');
+                                                           QUERY PLAN
+--------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ev_email_lower_idx on event_log  (cost=0.43..8.45 rows=1 width=194) (actual time=0.029..0.031 rows=1 loops=1)
+   Index Cond: (lower(email) = 'user1954290@contoh.ac.id'::text)
+   Buffers: shared hit=4
+ Planning Time: 0.144 ms
+ Execution Time: 0.050 ms
+(5 rows)
+
+Time: 0.859 ms
+
+
+test 3
+
+pagila=# EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE lower(email) = lower('user1954290@contoh.ac.id');
+                                                           QUERY PLAN
+--------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ev_email_lower_idx on event_log  (cost=0.43..8.45 rows=1 width=194) (actual time=0.040..0.042 rows=1 loops=1)
+   Index Cond: (lower(email) = 'user1954290@contoh.ac.id'::text)
+   Buffers: shared hit=4
+ Planning Time: 0.145 ms
+ Execution Time: 0.064 ms
+(5 rows)
+
+Time: 0.845 ms

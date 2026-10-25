@@ -22,11 +22,11 @@
 
 | Nama | NIM | Kontribusi Pertemuan 6 | Commit |
 |---|---|---|---|
-| Viter Moldy Kesuma | 251402079 | Langkah 1 (`q00_setup.sql`, `q01_ukuran_tabel.sql`, Q1) · Langkah 7 (Q27–Q31) · `README.md` · kerangka `laporan.md` · `hasil_pengukuran.md` | «tautan commit» |
-| Gideon Finsus Siburian | 251402038 | Langkah 2 — anatomi penyimpanan, Q2–Q6 | «tautan commit» |
-| Nadine Tantiara Hutagaol | 251402050 | Langkah 4 — partial, expression, covering, index-only scan, Q12–Q16 | «tautan commit» |
-| Rizky Cristian Fero Sihombing | 251402056 | Langkah 5 (GIN dan BRIN, Q17–Q21) dan Langkah 6 (statistik dan selektivitas, Q22–Q26) | «tautan commit» |
-| Siti Naifah Batubara | 251402067 | Langkah 3 — baseline, B-Tree, urutan kolom, Q7–Q11 | «tautan commit» |
+| Viter Moldy Kesuma | 251402079 | Langkah 1 (`q00_setup.sql`, `q01_ukuran_tabel.sql`, Q1) · Langkah 7 (Q27–Q31) · `README.md` · kerangka dan penutup `laporan.md` · `hasil_pengukuran.md` | `3c28375` · `e3c6d01` · `2bde31c` · `22a9462` · `7e4ff1b` · `acdf825` · «commit Langkah 7» |
+| Gideon Finsus Siburian | 251402038 | Langkah 2 — anatomi penyimpanan, Q2–Q6 | `4790895` |
+| Nadine Tantiara Hutagaol | 251402050 | Langkah 3 — baseline, B-Tree, urutan kolom, Q7–Q11 | `3b19bb2` |
+| Rizky Cristian Fero Sihombing | 251402056 | Langkah 4 — partial, expression, covering, index-only scan, Q12–Q16 | `b6358f0` |
+| Siti Naifah Batubara | 251402067 | Langkah 5 (GIN dan BRIN, Q17–Q21) dan Langkah 6 (statistik dan selektivitas, Q22–Q26) | `8c5f726` |
 
 ---
 
@@ -709,46 +709,224 @@ Titik peralihannya tidak bisa ditentukan sebagai satu angka yang selalu sama. Mi
 
 ### Langkah 7 · Harga tulis dan rekomendasi
 
-**Q27 · Harga tulis.** Berkas: `q27_harga_tulis.sql`. Nyatakan selisih waktu INSERT 200000
-baris dalam persen, untuk tiga kali uji.
+**Q27 · Harga tulis.** Berkas: `q27_harga_tulis.sql` (keluaran: `explain/q27_harga_tulis.txt`).
 
-> «Belum diisi.»
+Dua tabel berstruktur kolom identik dibuat dari `LIKE lab6.event_log EXCLUDING ALL`. Salah
+satunya dibiarkan polos, satunya diberi lima index yang mewakili kelima jenis yang diuji
+latihan ini: B-Tree majemuk `(customer_id, terjadi_pada DESC)`, partial `WHERE status='GAGAL'`,
+ekspresi `lower(email)`, GIN `jsonb_path_ops` pada `payload`, dan BRIN pada `terjadi_pada`.
+Setiap ulangan menyisipkan 200.000 baris yang sama ke kedua tabel, dan antar ulangan tabelnya
+di-`TRUNCATE` (bukan `DELETE`) supaya ruangnya kembali dan ukuran pada Q28 tetap adil.
 
-**Q28 · Ukuran dua keadaan.** Berkas: `q28_ukuran_dua_keadaan.sql`.
+| Ulangan | Tanpa index | Dengan 5 index | Selisih | Lebih lambat |
+|---|---:|---:|---:|---:|
+| 1 | 143,4 ms | 987,5 ms | 844,1 ms | **588,6%** |
+| 2 | 148,0 ms | 942,0 ms | 794,0 ms | **536,5%** |
+| 3 | 126,0 ms | 998,7 ms | 872,7 ms | **692,6%** |
+| **Tercepat** | **126,0 ms** | **942,0 ms** | 816,0 ms | 647,6% |
+| **Median** | **143,4 ms** | **987,5 ms** | 844,1 ms | 588,6% |
 
-> «Belum diisi.»
+**Penafsiran.** Memakai median, INSERT dengan lima index **588,6% lebih lambat**, atau hampir
+tujuh kali lipat waktu INSERT polos (987,5 / 143,4 = 6,9×). Angka ini bukan biaya satu index
+melainkan jumlah lima index: setiap baris baru memaksa lima struktur ikut diperbarui, dan GIN
+yang harus memecah `payload` menjadi entri-entri jalur adalah yang paling mahal. Sebaran
+ketiga ulangan cukup lebar (536,5% sampai 692,6%) karena INSERT bersaing dengan autovacuum dan
+penulisan WAL, sehingga median lebih layak dipakai daripada satu angka tunggal.
 
-**Q29 · Daftar index dan `idx_scan`.** Berkas: `q29_daftar_index.sql`. Sebutkan index dengan
-`idx_scan` nol, dan alasan bila tetap harus dipertahankan.
+**Q28 · Ukuran dua keadaan.** Berkas: `q28_ukuran_dua_keadaan.sql`
+(keluaran: `explain/q28_ukuran_dua_keadaan.txt`).
 
-> «Belum diisi.»
+| Tabel | Heap | Index | Total |
+|---|---:|---:|---:|
+| `tulis_tanpa_index` | 45 MB | 0 byte | **45 MB** (47.702.016 byte) |
+| `tulis_lima_index` | 45 MB | 27 MB | **72 MB** (75.620.352 byte) |
+| Selisih | sama | +27 MB | **+58,5%** |
 
-**Q30 · Rekomendasi final.** Berkas: `q30_rekomendasi_index.sql`.
+Rincian kelima index pada `tulis_lima_index`:
 
-> «Belum diisi.»
+| Index | Jenis | Ukuran |
+|---|---|---:|
+| `tulis_ekspresi_idx` | B-Tree `lower(email)` | 14 MB |
+| `tulis_btree_idx` | B-Tree `(customer_id, terjadi_pada DESC)` | 8.312 kB |
+| `tulis_gin_idx` | GIN `payload jsonb_path_ops` | 4.808 kB |
+| `tulis_partial_idx` | B-Tree partial `status='GAGAL'` | 176 kB |
+| `tulis_brin_idx` | BRIN `terjadi_pada` | 24 kB |
+
+**Penafsiran.** Heap kedua tabel sama persis 45 MB, jadi seluruh selisih 27 MB murni biaya
+index. Perhatikan sebarannya: `tulis_ekspresi_idx` sendirian 14 MB, lebih dari separuh total,
+karena `lower(email)` menyimpan salinan string email untuk setiap baris. Di ujung lain,
+BRIN hanya 24 kB — 583 kali lebih kecil daripada index ekspresi untuk tabel yang sama. Jadi
+"menambah index" bukan satu harga: tergantung jenis dan kolomnya, biayanya bisa berbeda tiga
+orde besaran.
+
+**Q29 · Daftar index dan `idx_scan`.** Berkas: `q29_daftar_index.sql`
+(keluaran: `explain/q29_daftar_index.txt`). Seluruh skema `lab6` memuat **17 index, 461 MB**,
+dan **8 di antaranya (88 MB) belum pernah dipakai sama sekali**.
+
+| Tabel | Index | `idx_scan` | `idx_tup_read` | Ukuran |
+|---|---|---:|---:|---:|
+| `event_log` | `event_log_pkey` | 6 | 1.200.000 | 43 MB |
+| `event_log` | `ev_email_lower_idx` | 1 | 1 | 86 MB |
+| `event_log` | `ev_cover3_idx` | 1 | 40 | 77 MB |
+| `event_log` | `ev_benar_idx` | 1 | 20 | 60 MB |
+| `event_log` | `idx_btree_terjadi` | 1 | 46.523 | 43 MB |
+| `event_log` | `ev_terjadi_pada_idx` | 1 | 46.523 | 43 MB |
+| `event_log` | `idx_status` | 1 | 2.000.000 | 13 MB |
+| `event_log` | `idx_gin_payload` | 1 | 80.000 | 7.096 kB |
+| `event_log` | `ev_gagal_idx` | 1 | 40.000 | 896 kB |
+| `event_log` | `ev_salah_idx` | **0** | 0 | 60 MB |
+| `tulis_lima_index` | `tulis_ekspresi_idx` | **0** | 0 | 14 MB |
+| `tulis_lima_index` | `tulis_btree_idx` | **0** | 0 | 8.312 kB |
+| `tulis_lima_index` | `tulis_gin_idx` | **0** | 0 | 4.808 kB |
+| `hot_longgar` | `hot_longgar_pkey` | **0** | 0 | 456 kB |
+| `hot_penuh` | `hot_penuh_pkey` | **0** | 0 | 456 kB |
+| `tulis_lima_index` | `tulis_partial_idx` | **0** | 0 | 176 kB |
+| `tulis_lima_index` | `tulis_brin_idx` | **0** | 0 | 24 kB |
+
+**Index dengan `idx_scan` nol dan alasannya.**
+
+- **`hot_longgar_pkey` dan `hot_penuh_pkey` (456 kB masing-masing) wajib dipertahankan** meski
+  tidak pernah dipakai membaca, karena keduanya **primary key**: tugasnya menjaga keunikan
+  `id`, bukan mempercepat query. Menghapusnya mengubah aturan integritas tabel, bukan sekadar
+  mengurangi ruang.
+- **Lima index pada `tulis_lima_index` (27 MB) memang tidak pernah dibaca**, dan itu persis
+  maksud percobaan Q27: tabel itu hanya ditulis. Kelimanya dihapus bersama tabel uji setelah
+  latihan selesai.
+- **`ev_salah_idx` (60 MB) adalah satu-satunya index "nol" pada tabel sungguhan.** Ia dibuat di
+  Q8 untuk membuktikan bahwa urutan kolom yang keliru membuat index nyaris tak berguna, lalu
+  tidak pernah terpilih lagi begitu `ev_benar_idx` ada. Inilah kandidat hapus paling jelas.
+
+**Catatan membaca `idx_tup_read`.** Angka `idx_scan` yang sama-sama 1 menyembunyikan perbedaan
+besar: `ev_email_lower_idx` membaca **1 baris** dalam satu kali pakai, sedangkan `idx_status`
+membaca **2.000.000 baris**. Jadi `idx_scan` hanya menghitung berapa kali index dibuka, bukan
+seberapa berguna ia. Sebagian besar index di sini baru dipakai sekali karena setiap soal
+memang hanya menjalankan query ujinya sekali atau tiga kali, bukan karena beban kerja nyata.
+
+**Q30 · Rekomendasi final.** Berkas: `q30_rekomendasi_index.sql`
+(keluaran: `explain/q30_rekomendasi_index.txt`).
+
+Seluruh index pada `event_log` memakan **434 MB, yaitu 94,7% dari heap-nya sendiri (458 MB)**,
+sehingga satu tabel dua juta baris menghabiskan **891 MB**. Angka inilah yang membuat
+pemangkasan layak dibahas.
+
+| Index | `idx_scan` | Ukuran | % heap | Keputusan |
+|---|---:|---:|---:|---|
+| `event_log_pkey` | 6 | 43 MB | 9,37 | **dipertahankan** — primary key, menjaga keunikan |
+| `ev_gagal_idx` | 1 | 896 kB | 0,19 | **dipertahankan** — termurah, melayani `status='GAGAL'` |
+| `idx_gin_payload` | 1 | 7.096 kB | 1,51 | **dipertahankan** — satu-satunya jalan untuk `payload @>` |
+| `ev_cover3_idx` | 1 | 77 MB | 16,91 | **dipertahankan** sebagai gabungan |
+| `ev_benar_idx` | 1 | 60 MB | 13,15 | **digabung** ke `ev_cover3_idx` |
+| `ev_terjadi_pada_idx` | 1 | 43 MB | 9,37 | **digabung** dengan `idx_btree_terjadi` |
+| `idx_btree_terjadi` | 1 | 43 MB | 9,37 | **dipertahankan** (salah satu saja) |
+| `idx_status` | 1 | 13 MB | 2,90 | **ditinjau ulang** — 84% baris bernilai `SUKSES` |
+| `ev_salah_idx` | 0 | 60 MB | 13,13 | **dihapus** — tidak pernah dipakai |
+| `ev_email_lower_idx` | 1 | 86 MB | 18,84 | **dihapus** kecuali ada pencarian email |
+
+**Tiga kandidat gabung yang ditemukan query di `q30`.**
+
+1. `ev_benar_idx (customer_id, terjadi_pada DESC)` adalah **awalan** dari
+   `ev_cover3_idx (customer_id, terjadi_pada, jumlah)`. Satu index yang lebih lebar sudah
+   melayani seluruh query yang dilayani yang sempit, jadi menyimpan keduanya membuang **60 MB**.
+2. `ev_terjadi_pada_idx (terjadi_pada DESC)` dan `idx_btree_terjadi (terjadi_pada)` adalah
+   **index kembar** yang hanya berbeda arah urutan, masing-masing 43 MB dan keduanya membaca
+   46.523 baris yang sama. B-Tree dapat dibaca maju maupun mundur, jadi salah satu cukup:
+   hemat **43 MB**. Keduanya lahir karena dibuat oleh dua berkas berbeda (Q12 dan Q19) —
+   contoh nyata bagaimana index kembar muncul di proyek yang dikerjakan beramai-ramai.
+3. `ev_salah_idx (terjadi_pada, customer_id)` memuat `terjadi_pada` di depan, sehingga query
+   rentang waktu sudah terlayani index waktu yang 43 MB. Ia 60 MB dan `idx_scan`-nya nol.
+
+**Ringkasan penghematan.** Menghapus `ev_salah_idx` (60 MB), `ev_benar_idx` (60 MB), satu dari
+dua index waktu kembar (43 MB), dan `ev_email_lower_idx` (86 MB) memangkas **249 MB dari
+434 MB**. Jejak index turun menjadi sekitar 185 MB, yaitu **40% dari heap, bukan 94,7%**, dan
+setiap INSERT ikut lebih ringan karena hanya enam struktur yang diperbarui, bukan sepuluh.
+
+**Catatan jujur tentang BRIN.** Pada basis data yang dipakai pengukuran ini **tidak ada index
+BRIN** pada `event_log`: berkas `q19_brin_correlation.sql` langsung mengukur
+`lab6.idx_brin_terjadi` tanpa pernah membuatnya, sehingga dua galat muncul saat seluruh
+rangkaian dijalankan ulang dari nol (`relation "lab6.idx_brin_terjadi" does not exist` dan
+`relation "idx_gin_payload" does not exist` karena nama tanpa skema). Angka BRIN pada Q19–Q20
+berasal dari sesi terpisah tempat index itu sempat dibuat manual. Sebelum pengumpulan, berkas
+itu perlu dilengkapi `CREATE INDEX ... USING brin (terjadi_pada) WITH (pages_per_range=128)`
+dan Q19–Q20 dijalankan ulang, supaya hasilnya dapat direproduksi dari berkas yang ada di
+repositori. Bila rekomendasi BRIN jadi diambil, dasarnya kuat: pada tabel uji Q28, BRIN hanya
+**24 kB** sementara index ekspresi 14 MB.
 
 **Q31 · Reflektif.** *Untuk setiap index yang direkomendasikan dihapus atau dipertahankan,
 sebutkan satu angka sebagai dasar keputusan.*
 
-> «Belum diisi.»
+| Index | Keputusan | Satu angka dasarnya |
+|---|---|---|
+| `event_log_pkey` | dipertahankan | `idx_scan` **6**, terbanyak di skema, dan satu-satunya penjaga keunikan `event_id` |
+| `ev_gagal_idx` | dipertahankan | **896 kB** = 0,19% heap, dan 97,96% lebih kecil daripada index polos pada kolom yang sama |
+| `idx_gin_payload` | dipertahankan | **1,51% heap** untuk melayani 80.000 baris `payload @> '{"promo": true}'` |
+| `ev_cover3_idx` | dipertahankan | menyerap pekerjaan `ev_benar_idx`, menghemat **60 MB** bila yang sempit dihapus |
+| `ev_benar_idx` | dihapus/digabung | **60 MB** untuk kolom kunci yang sudah jadi awalan index lain |
+| `ev_terjadi_pada_idx` | dihapus/digabung | **43 MB** kembar dengan `idx_btree_terjadi`, beda arah urutan saja |
+| `idx_status` | ditinjau ulang | **84%** baris bernilai `SUKSES`, dan pada fraksi itu optimizer tetap memilih Seq Scan |
+| `ev_salah_idx` | dihapus | `idx_scan` **0** untuk **60 MB** |
+| `ev_email_lower_idx` | dihapus | **86 MB** (18,84% heap) untuk 1 kali pakai yang membaca **1 baris** |
+
+**Pola keputusannya.** Index dipertahankan bila manfaatnya terukur dan ruangnya kecil relatif
+heap, atau bila ia menjaga integritas — bukan karena "mungkin berguna nanti". Index dihapus
+bila `idx_scan` nol, bila kolom kuncinya sudah jadi awalan index lain, atau bila rasio
+ruang-terhadap-manfaatnya buruk seperti 86 MB untuk satu baris. Dua angka yang membingkai
+seluruh keputusan di atas: index `event_log` memakan **94,7% ruang heap**, dan INSERT dengan
+lima index **588,6% lebih lambat** daripada tanpa index. Index bukan hadiah gratis; ia dibayar
+dua kali, di ruang penyimpanan dan di setiap operasi tulis.
 
 ---
 
 ## Tabel Perbandingan
 
-Dihasilkan ulang dari `explain/*.txt` dengan `rangkum_pengukuran.py`, lalu diringkas:
+Angka diambil dari keluaran `explain/*.txt` masing-masing anggota. Setiap query dijalankan
+tiga kali; yang dilaporkan adalah tercepat dan median, bukan satu angka.
 
-| Query/index | Tercepat | Median | Buffers | Ukuran | Keputusan |
-|---|---:|---:|---:|---:|---|
-| | | | | | |
+| Query / keadaan | Node | Tercepat | Median | Buffers | Ukuran index | Keputusan |
+|---|---|---:|---:|---|---:|---|
+| Q17 `payload @> promo` dengan GIN | Bitmap Heap Scan | 1.548,401 ms | — | hit=2 read=58.585 | 7.096 kB | GIN dipertahankan: tanpa GIN seluruh baris harus diuji operator `@>` |
+| Q18 `tags @> kanal:1` dengan GIN | Bitmap Heap Scan | 297,229 ms | 321,077 ms | hit=1 read=58.641 | 4.808 kB | GIN menang |
+| Q18 `tags @> kanal:1` tanpa GIN | Seq Scan | 531,721 ms | 582,267 ms | hit=16.344 read=42.222 | — | pembanding |
+| Q20 rentang 7 hari, BRIN | Bitmap Heap Scan | 11,276 ms | 13,864 ms | hit=1.417 read=1 | **32 kB** | BRIN: ruang 1.372× lebih kecil, waktu setara |
+| Q20 rentang 7 hari, B-Tree | Index Scan | 11,189 ms | 11,342 ms | hit=1.678 | 43 MB | menang tipis dalam waktu, kalah jauh dalam ruang |
+| Q22 `status='GAGAL'` (2%) | Index Scan | 108,216 ms | 138,654 ms | — | 896 kB | index dipakai |
+| Q22 `status='SUKSES'` (84%) | Seq Scan | 319,486 ms | 361,549 ms | — | 13 MB | index diabaikan optimizer |
+| Q24 `SUKSES`, `random_page_cost`=1.1 | Seq Scan | 341,589 ms | 498,867 ms | — | 13 MB | tetap Seq Scan |
+| Q27 INSERT 200.000 tanpa index | — | 126,0 ms | 143,4 ms | — | 0 byte | garis dasar tulis |
+| Q27 INSERT 200.000 dengan 5 index | — | 942,0 ms | 987,5 ms | — | 27 MB | **588,6% lebih lambat** |
+| Q28 ukuran tabel uji tulis | — | — | — | — | 45 MB lawan 72 MB | **+58,5%** ruang |
+
+Baris untuk Q7–Q16 menyusul setelah jawaban Langkah 3 dan Langkah 4 dilengkapi; bukti
+`explain/`-nya sudah ada di repositori, tinggal angkanya disalin ke sini.
 
 ---
 
 ## Rekomendasi Akhir
 
+Dasar angkanya: seluruh index `event_log` memakan **434 MB atau 94,7% dari heap** (458 MB),
+dan INSERT 200.000 baris dengan lima index **588,6% lebih lambat** daripada tanpa index.
+
 | Index | Keputusan | Angka dasar keputusan |
 |---|---|---|
-| | dipertahankan / dihapus / digabung | |
+| `event_log_pkey` (43 MB) | dipertahankan | `idx_scan` 6, terbanyak di skema, sekaligus penjaga keunikan |
+| `ev_gagal_idx` (896 kB) | dipertahankan | 0,19% heap, 97,96% lebih kecil daripada index polos sekolom |
+| `idx_gin_payload` (7.096 kB) | dipertahankan | 1,51% heap untuk 80.000 baris `payload @>` |
+| `ev_cover3_idx` (77 MB) | dipertahankan sebagai gabungan | menyerap pekerjaan `ev_benar_idx`, hemat 60 MB |
+| `ev_benar_idx` (60 MB) | digabung ke `ev_cover3_idx` | kolom kuncinya awalan index yang lebih lebar |
+| `ev_terjadi_pada_idx` (43 MB) | digabung dengan `idx_btree_terjadi` | kembar, beda arah urutan saja; hemat 43 MB |
+| `idx_status` (13 MB) | ditinjau ulang | 84% baris `SUKSES`; pada fraksi itu optimizer memilih Seq Scan |
+| `ev_salah_idx` (60 MB) | dihapus | `idx_scan` 0 |
+| `ev_email_lower_idx` (86 MB) | dihapus | 18,84% heap untuk 1 kali pakai yang membaca 1 baris |
+| `hot_*_pkey`, `tulis_*` | dihapus bersama tabel ujinya | tabel bantu Q4 dan Q27, bukan bagian beban kerja |
+
+Total penghematan bila keempat kandidat hapus dieksekusi: **249 MB dari 434 MB**, sehingga
+jejak index turun ke sekitar 185 MB atau 40% dari heap.
+
+Satu hal yang harus dibereskan sebelum pengumpulan: **index BRIN tidak pernah dibuat oleh
+berkas mana pun di repositori** (lihat catatan pada Q30), sehingga rekomendasi tentang BRIN
+belum bisa direproduksi dari berkas yang ada. Lengkapi `q19_brin_correlation.sql` dengan
+`CREATE INDEX ... USING brin (terjadi_pada) WITH (pages_per_range=128)`, perbaiki
+`pg_relation_size('idx_gin_payload')` menjadi `'lab6.idx_gin_payload'` pada
+`q17_gin_payload.sql`, lalu jalankan ulang Q17 dan Q19–Q20.
 
 ---
 
@@ -756,4 +934,8 @@ Dihasilkan ulang dari `explain/*.txt` dengan `rangkum_pengukuran.py`, lalu dirin
 
 | Anggota | Bantuan AI yang dipakai | Cara memverifikasi |
 |---|---|---|
-| | | |
+| Viter Moldy Kesuma | Claude (Anthropic) untuk menyusun draf `q00_setup.sql`, `q01_ukuran_tabel.sql`, berkas Q27–Q30, `rangkum_pengukuran.py`, `README.md`, dan kerangka `laporan.md` | Seluruh berkas dijalankan ulang di laptop sendiri (PostgreSQL 17.11 di Docker) dan keluarannya disimpan apa adanya di `explain/`. Setiap angka pada laporan disalin dari berkas bukti itu, bukan dari contoh keluaran AI. Dua galat yang ditemukan saat menjalankan ulang seluruh rangkaian dari nol (`idx_brin_terjadi` tidak pernah dibuat dan `idx_gin_payload` tanpa skema) ditelusuri sampai berkas penyebabnya dan dilaporkan apa adanya pada Q30. |
+| Gideon Finsus Siburian | «isi sendiri» | «isi sendiri» |
+| Nadine Tantiara Hutagaol | «isi sendiri» | «isi sendiri» |
+| Rizky Cristian Fero Sihombing | «isi sendiri» | «isi sendiri» |
+| Siti Naifah Batubara | «isi sendiri» | «isi sendiri» |

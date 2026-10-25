@@ -1,0 +1,41 @@
+pagila=# SET max_parallel_workers_per_gather = 0;
+
+CREATE INDEX IF NOT EXISTS ev_terjadi_pada_idx
+    ON lab6.event_log (terjadi_pada DESC);
+
+CREATE INDEX IF NOT EXISTS ev_gagal_idx
+    ON lab6.event_log (terjadi_pada DESC)
+    WHERE status = 'GAGAL';
+
+SELECT
+    'ev_terjadi_pada_idx (penuh)' AS nama_index,
+    pg_size_pretty(pg_relation_size('lab6.ev_terjadi_pada_idx')) AS ukuran,
+    pg_relation_size('lab6.ev_terjadi_pada_idx') AS ukuran_byte
+UNION ALL
+SELECT
+    'ev_gagal_idx (partial)',
+    pg_size_pretty(pg_relation_size('lab6.ev_gagal_idx')),
+    pg_relation_size('lab6.ev_gagal_idx');
+
+SELECT
+    round(
+        100.0 * (1 - pg_relation_size('lab6.ev_gagal_idx')::numeric
+                     / pg_relation_size('lab6.ev_terjadi_pada_idx')),
+        2
+    ) AS persen_penghematan;
+
+
+
+SET
+CREATE INDEX
+CREATE INDEX
+         nama_index          | ukuran | ukuran_byte
+-----------------------------+--------+-------------
+ ev_terjadi_pada_idx (penuh) | 43 MB  |    44949504
+ ev_gagal_idx (partial)      | 896 kB |      917504
+(2 rows)
+
+ persen_penghematan
+--------------------
+              97.96
+(1 row)

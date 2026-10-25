@@ -1,0 +1,7 @@
+psql:/proc/self/fd/0:5: ERROR:  nilai pembayaran harus positif, diterima -4.99
+CONTEXT:  PL/pgSQL function lab5.process_rental(integer,integer,integer,numeric,jsonb,bigint) line 4 at RAISE
+ count 
+-------
+     2
+(1 row)
+

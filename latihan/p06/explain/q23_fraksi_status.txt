@@ -1,0 +1,123 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.140 ms
+SELECT
+    status,
+    COUNT(*) AS jumlah,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS persentase
+FROM lab6.event_log
+GROUP BY status
+ORDER BY jumlah;
+  status  | jumlah  | persentase 
+----------+---------+------------
+ GAGAL    |   40000 |       2.00
+ TERTUNDA |  280000 |      14.00
+ SUKSES   | 1680000 |      84.00
+(3 rows)
+
+Time: 67.904 ms
+===== Q23 sapuan fraksi dengan random_page_cost bawaan
+SELECT current_setting('random_page_cost') AS random_page_cost,
+       current_setting('seq_page_cost') AS seq_page_cost;
+ random_page_cost | seq_page_cost 
+------------------+---------------
+ 4                | 1
+(1 row)
+
+Time: 1.841 ms
+DO $$
+DECLARE
+  k int; j json; node text; est bigint; nyata bigint; batas int;
+BEGIN
+  FOREACH k IN ARRAY ARRAY[1,2,5,10,20,30,32,34,36,38,40,50,70] LOOP
+    batas := 60000 * k / 100;
+    EXECUTE format('EXPLAIN (FORMAT JSON) SELECT sum(length(kota)) FROM lab6.event_log WHERE customer_id <= %s', batas) INTO j;
+    node := j->0->'Plan'->'Plans'->0->>'Node Type';
+    est  := (j->0->'Plan'->'Plans'->0->>'Plan Rows')::bigint;
+    EXECUTE format('SELECT count(*) FROM lab6.event_log WHERE customer_id <= %s', batas) INTO nyata;
+    RAISE NOTICE 'customer_id <= % -> node=% | estimasi=% | nyata=% (% persen)',
+      lpad(batas::text,5), rpad(node,18), est, nyata, round(100.0*nyata/2000000, 1);
+  END LOOP;
+END $$;
+NOTICE:  customer_id <=   600 -> node=Bitmap Heap Scan   | estimasi=19410 | nyata=19856 (1.0 persen)
+NOTICE:  customer_id <=  1200 -> node=Bitmap Heap Scan   | estimasi=38032 | nyata=39779 (2.0 persen)
+NOTICE:  customer_id <=  3000 -> node=Bitmap Heap Scan   | estimasi=96119 | nyata=99722 (5.0 persen)
+NOTICE:  customer_id <=  6000 -> node=Bitmap Heap Scan   | estimasi=198289 | nyata=199610 (10.0 persen)
+NOTICE:  customer_id <= 12000 -> node=Bitmap Heap Scan   | estimasi=399705 | nyata=400101 (20.0 persen)
+NOTICE:  customer_id <= 18000 -> node=Bitmap Heap Scan   | estimasi=595266 | nyata=599341 (30.0 persen)
+NOTICE:  customer_id <= 19200 -> node=Bitmap Heap Scan   | estimasi=631952 | nyata=639264 (32.0 persen)
+NOTICE:  customer_id <= 20400 -> node=Bitmap Heap Scan   | estimasi=671641 | nyata=678968 (33.9 persen)
+NOTICE:  customer_id <= 21600 -> node=Seq Scan           | estimasi=707026 | nyata=718723 (35.9 persen)
+NOTICE:  customer_id <= 22800 -> node=Seq Scan           | estimasi=746002 | nyata=758815 (37.9 persen)
+NOTICE:  customer_id <= 24000 -> node=Seq Scan           | estimasi=787531 | nyata=799039 (40.0 persen)
+NOTICE:  customer_id <= 30000 -> node=Seq Scan           | estimasi=984258 | nyata=998927 (49.9 persen)
+NOTICE:  customer_id <= 42000 -> node=Seq Scan           | estimasi=1391054 | nyata=1399382 (70.0 persen)
+DO
+Time: 301.456 ms
+===== Q23 pengukuran di bawah titik peralihan · run 1
+EXPLAIN (ANALYZE, BUFFERS) SELECT sum(length(kota)) FROM lab6.event_log WHERE customer_id <= 18000;
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=82772.89..82772.90 rows=1 width=8) (actual time=200.955..200.957 rows=1 loops=1)
+   Buffers: shared hit=2322 read=58547 written=3
+   ->  Bitmap Heap Scan on event_log  (cost=13785.74..79796.56 rows=595266 width=7) (actual time=26.515..174.316 rows=599341 loops=1)
+         Recheck Cond: (customer_id <= 18000)
+         Heap Blocks: exact=58570
+         Buffers: shared hit=2322 read=58547 written=3
+         ->  Bitmap Index Scan on ev_benar_idx  (cost=0.00..13636.92 rows=595266 width=0) (actual time=20.819..20.820 rows=599370 loops=1)
+               Index Cond: (customer_id <= 18000)
+               Buffers: shared hit=2299
+ Planning Time: 0.063 ms
+ Execution Time: 201.295 ms
+(11 rows)
+
+Time: 201.677 ms
+===== Q23 pengukuran di bawah titik peralihan · run 2
+EXPLAIN (ANALYZE, BUFFERS) SELECT sum(length(kota)) FROM lab6.event_log WHERE customer_id <= 18000;
+                                                                QUERY PLAN                                                                 
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=82772.89..82772.90 rows=1 width=8) (actual time=188.460..188.461 rows=1 loops=1)
+   Buffers: shared read=60869
+   ->  Bitmap Heap Scan on event_log  (cost=13785.74..79796.56 rows=595266 width=7) (actual time=29.283..161.834 rows=599341 loops=1)
+         Recheck Cond: (customer_id <= 18000)
+         Heap Blocks: exact=58570
+         Buffers: shared read=60869
+         ->  Bitmap Index Scan on ev_benar_idx  (cost=0.00..13636.92 rows=595266 width=0) (actual time=23.618..23.618 rows=599370 loops=1)
+               Index Cond: (customer_id <= 18000)
+               Buffers: shared read=2299
+ Planning Time: 0.077 ms
+ Execution Time: 188.980 ms
+(11 rows)
+
+Time: 189.369 ms
+===== Q23 pengukuran di atas titik peralihan · run 1
+EXPLAIN (ANALYZE, BUFFERS) SELECT sum(length(kota)) FROM lab6.event_log WHERE customer_id <= 30000;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=88492.29..88492.30 rows=1 width=8) (actual time=142.617..142.619 rows=1 loops=1)
+   Buffers: shared hit=16352 read=42218
+   ->  Seq Scan on event_log  (cost=0.00..83571.00 rows=984258 width=7) (actual time=0.021..101.683 rows=998927 loops=1)
+         Filter: (customer_id <= 30000)
+         Rows Removed by Filter: 1001073
+         Buffers: shared hit=16352 read=42218
+ Planning Time: 0.076 ms
+ Execution Time: 142.639 ms
+(8 rows)
+
+Time: 143.047 ms
+===== Q23 pengukuran di atas titik peralihan · run 2
+EXPLAIN (ANALYZE, BUFFERS) SELECT sum(length(kota)) FROM lab6.event_log WHERE customer_id <= 30000;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=88492.29..88492.30 rows=1 width=8) (actual time=143.379..143.381 rows=1 loops=1)
+   Buffers: shared hit=16352 read=42218
+   ->  Seq Scan on event_log  (cost=0.00..83571.00 rows=984258 width=7) (actual time=0.229..102.305 rows=998927 loops=1)
+         Filter: (customer_id <= 30000)
+         Rows Removed by Filter: 1001073
+         Buffers: shared hit=16352 read=42218
+ Planning Time: 0.077 ms
+ Execution Time: 143.402 ms
+(8 rows)
+
+Time: 143.814 ms

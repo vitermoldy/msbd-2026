@@ -3,28 +3,28 @@ DROP TABLE IF EXISTS lab6.tulis_tanpa_index, lab6.tulis_lima_index;
 NOTICE:  table "tulis_tanpa_index" does not exist, skipping
 NOTICE:  table "tulis_lima_index" does not exist, skipping
 DROP TABLE
-Time: 0.302 ms
+Time: 0.283 ms
 CREATE TABLE lab6.tulis_tanpa_index (LIKE lab6.event_log EXCLUDING ALL);
 CREATE TABLE
-Time: 14.409 ms
+Time: 5.135 ms
 CREATE TABLE lab6.tulis_lima_index  (LIKE lab6.event_log EXCLUDING ALL);
 CREATE TABLE
-Time: 1.284 ms
+Time: 1.186 ms
 CREATE INDEX tulis_btree_idx  ON lab6.tulis_lima_index (customer_id, terjadi_pada DESC);
 CREATE INDEX
-Time: 0.979 ms
+Time: 0.931 ms
 CREATE INDEX tulis_partial_idx ON lab6.tulis_lima_index (terjadi_pada DESC) WHERE status='GAGAL';
 CREATE INDEX
-Time: 0.984 ms
+Time: 1.084 ms
 CREATE INDEX tulis_ekspresi_idx ON lab6.tulis_lima_index (lower(email));
 CREATE INDEX
-Time: 0.885 ms
+Time: 1.043 ms
 CREATE INDEX tulis_gin_idx     ON lab6.tulis_lima_index USING gin (payload jsonb_path_ops);
 CREATE INDEX
-Time: 0.891 ms
+Time: 0.873 ms
 CREATE INDEX tulis_brin_idx    ON lab6.tulis_lima_index USING brin (terjadi_pada) WITH (pages_per_range=128);
 CREATE INDEX
-Time: 1.052 ms
+Time: 0.938 ms
 DO $$
 DECLARE t0 timestamptz; tanpa_ms numeric; lima_ms numeric;
 BEGIN
@@ -43,11 +43,11 @@ BEGIN
   RAISE NOTICE 'selisih                              : % ms (% persen lebih lambat)',
         round(lima_ms-tanpa_ms,1), round(100.0*(lima_ms-tanpa_ms)/tanpa_ms, 1);
 END $$;
-NOTICE:  INSERT 200000 baris tanpa index      : 143.4 ms
-NOTICE:  INSERT 200000 baris dengan 5 index   : 987.5 ms
-NOTICE:  selisih                              : 844.1 ms (588.6 persen lebih lambat)
+NOTICE:  INSERT 200000 baris tanpa index      : 147.8 ms
+NOTICE:  INSERT 200000 baris dengan 5 index   : 993.8 ms
+NOTICE:  selisih                              : 846.0 ms (572.4 persen lebih lambat)
 DO
-Time: 1151.913 ms (00:01.152)
+Time: 1149.029 ms (00:01.149)
 DO $$
 DECLARE i int; t0 timestamptz; tanpa_ms numeric; lima_ms numeric;
 BEGIN
@@ -63,7 +63,7 @@ BEGIN
           i, tanpa_ms, lima_ms, round(100.0*(lima_ms-tanpa_ms)/tanpa_ms, 1);
   END LOOP;
 END $$;
-NOTICE:  ulangan 2: tanpa index 148.0 ms | lima index 942.0 ms | 536.5 persen lebih lambat
-NOTICE:  ulangan 3: tanpa index 126.0 ms | lima index 998.7 ms | 692.6 persen lebih lambat
+NOTICE:  ulangan 2: tanpa index 153.4 ms | lima index 938.6 ms | 511.9 persen lebih lambat
+NOTICE:  ulangan 3: tanpa index 124.5 ms | lima index 908.4 ms | 629.6 persen lebih lambat
 DO
-Time: 2260.016 ms (00:02.260)
+Time: 2166.124 ms (00:02.166)

@@ -1,0 +1,164 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.188 ms
+CREATE INDEX IF NOT EXISTS idx_status ON lab6.event_log (status);
+CREATE INDEX
+Time: 608.687 ms
+ANALYZE lab6.event_log;
+ANALYZE
+Time: 321.088 ms
+SELECT pg_size_pretty(pg_relation_size('lab6.idx_status')) AS ukuran_idx_status;
+ ukuran_idx_status 
+-------------------
+ 13 MB
+(1 row)
+
+Time: 0.265 ms
+===== Q22a status SUKSES 84 persen · run 1
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'SUKSES';
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83571.00 rows=1681067 width=194) (actual time=0.010..143.687 rows=1680000 loops=1)
+   Filter: (status = 'SUKSES'::text)
+   Rows Removed by Filter: 320000
+   Buffers: shared hit=8312 read=50258
+ Planning:
+   Buffers: shared hit=120 read=1
+ Planning Time: 0.267 ms
+ Execution Time: 181.782 ms
+(8 rows)
+
+Time: 182.337 ms
+===== Q22a status SUKSES 84 persen · run 2
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'SUKSES';
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83571.00 rows=1681067 width=194) (actual time=0.084..126.430 rows=1680000 loops=1)
+   Filter: (status = 'SUKSES'::text)
+   Rows Removed by Filter: 320000
+   Buffers: shared hit=8344 read=50226
+ Planning Time: 0.079 ms
+ Execution Time: 160.374 ms
+(6 rows)
+
+Time: 160.954 ms
+===== Q22a status SUKSES 84 persen · run 3
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'SUKSES';
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83571.00 rows=1681067 width=194) (actual time=0.015..124.179 rows=1680000 loops=1)
+   Filter: (status = 'SUKSES'::text)
+   Rows Removed by Filter: 320000
+   Buffers: shared hit=8376 read=50194
+ Planning Time: 0.075 ms
+ Execution Time: 157.416 ms
+(6 rows)
+
+Time: 157.852 ms
+===== Q22b status GAGAL 2 persen · run 1
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'GAGAL';
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ev_gagal_idx on event_log  (cost=0.29..2155.31 rows=38468 width=194) (actual time=0.026..72.192 rows=40000 loops=1)
+   Buffers: shared hit=5699 read=34399 dirtied=2 written=10
+ Planning Time: 0.084 ms
+ Execution Time: 73.076 ms
+(4 rows)
+
+Time: 73.531 ms
+===== Q22b status GAGAL 2 persen · run 2
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'GAGAL';
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ev_gagal_idx on event_log  (cost=0.29..2155.31 rows=38468 width=194) (actual time=0.012..66.570 rows=40000 loops=1)
+   Buffers: shared hit=33 read=40061 written=16
+ Planning Time: 0.069 ms
+ Execution Time: 67.643 ms
+(4 rows)
+
+Time: 67.949 ms
+===== Q22b status GAGAL 2 persen · run 3
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'GAGAL';
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ev_gagal_idx on event_log  (cost=0.29..2155.31 rows=38468 width=194) (actual time=0.011..63.387 rows=40000 loops=1)
+   Buffers: shared hit=33 read=40061
+ Planning Time: 0.070 ms
+ Execution Time: 64.226 ms
+(4 rows)
+
+Time: 64.535 ms
+===== Q22c status TERTUNDA 14 persen · run 1
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'TERTUNDA';
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=3130.65..65207.46 rows=280545 width=194) (actual time=12.074..114.656 rows=280000 loops=1)
+   Recheck Cond: (status = 'TERTUNDA'::text)
+   Heap Blocks: exact=58570
+   Buffers: shared hit=11013 read=47799
+   ->  Bitmap Index Scan on idx_status  (cost=0.00..3060.51 rows=280545 width=0) (actual time=6.388..6.389 rows=280000 loops=1)
+         Index Cond: (status = 'TERTUNDA'::text)
+         Buffers: shared read=242
+ Planning Time: 0.082 ms
+ Execution Time: 120.183 ms
+(9 rows)
+
+Time: 120.617 ms
+===== Q22c status TERTUNDA 14 persen · run 2
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'TERTUNDA';
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=3130.65..65207.46 rows=280545 width=194) (actual time=12.223..126.936 rows=280000 loops=1)
+   Recheck Cond: (status = 'TERTUNDA'::text)
+   Heap Blocks: exact=58570
+   Buffers: shared read=58812
+   ->  Bitmap Index Scan on idx_status  (cost=0.00..3060.51 rows=280545 width=0) (actual time=6.551..6.552 rows=280000 loops=1)
+         Index Cond: (status = 'TERTUNDA'::text)
+         Buffers: shared read=242
+ Planning Time: 0.100 ms
+ Execution Time: 132.557 ms
+(9 rows)
+
+Time: 133.090 ms
+===== Q22c status TERTUNDA 14 persen · run 3
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'TERTUNDA';
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=3130.65..65207.46 rows=280545 width=194) (actual time=11.643..126.012 rows=280000 loops=1)
+   Recheck Cond: (status = 'TERTUNDA'::text)
+   Heap Blocks: exact=58570
+   Buffers: shared read=58812
+   ->  Bitmap Index Scan on idx_status  (cost=0.00..3060.51 rows=280545 width=0) (actual time=5.979..5.979 rows=280000 loops=1)
+         Index Cond: (status = 'TERTUNDA'::text)
+         Buffers: shared read=242
+ Planning Time: 0.073 ms
+ Execution Time: 131.808 ms
+(9 rows)
+
+Time: 132.192 ms
+===== Q22d status SUKSES dipaksa memakai index · run 1
+BEGIN;
+BEGIN
+Time: 0.165 ms
+SET LOCAL enable_seqscan = off;
+SET
+Time: 0.154 ms
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'SUKSES';
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=18744.70..98328.03 rows=1681067 width=194) (actual time=24.500..195.597 rows=1680000 loops=1)
+   Recheck Cond: (status = 'SUKSES'::text)
+   Heap Blocks: exact=58570
+   Buffers: shared read=59987
+   ->  Bitmap Index Scan on idx_status  (cost=0.00..18324.43 rows=1681067 width=0) (actual time=18.380..18.381 rows=1680000 loops=1)
+         Index Cond: (status = 'SUKSES'::text)
+         Buffers: shared read=1417
+ Planning Time: 0.079 ms
+ Execution Time: 230.398 ms
+(9 rows)
+
+Time: 230.822 ms
+ROLLBACK;
+ROLLBACK
+Time: 0.285 ms

@@ -1,0 +1,194 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.178 ms
+CREATE INDEX IF NOT EXISTS ev_cover_idx
+    ON lab6.event_log (customer_id)
+    INCLUDE (terjadi_pada, jumlah);
+CREATE INDEX
+Time: 1658.120 ms (00:01.658)
+ANALYZE lab6.event_log;
+ANALYZE
+Time: 349.989 ms
+SELECT pg_size_pretty(pg_relation_size('lab6.ev_cover_idx')) AS ukuran_ev_cover_idx;
+ ukuran_ev_cover_idx 
+---------------------
+ 77 MB
+(1 row)
+
+Time: 0.284 ms
+SELECT 'sebelum UPDATE' AS tahap, relallvisible, relpages,
+       round(100.0*relallvisible/nullif(relpages,0), 2) AS persen_all_visible
+FROM pg_class WHERE oid = 'lab6.event_log'::regclass;
+     tahap      | relallvisible | relpages | persen_all_visible 
+----------------+---------------+----------+--------------------
+ sebelum UPDATE |          7822 |    58569 |              13.36
+(1 row)
+
+Time: 0.474 ms
+UPDATE lab6.event_log SET kota = kota WHERE customer_id = 4211;
+UPDATE 33
+Time: 3.582 ms
+SELECT 'sesudah UPDATE' AS tahap, relallvisible, relpages,
+       round(100.0*relallvisible/nullif(relpages,0), 2) AS persen_all_visible
+FROM pg_class WHERE oid = 'lab6.event_log'::regclass;
+     tahap      | relallvisible | relpages | persen_all_visible 
+----------------+---------------+----------+--------------------
+ sesudah UPDATE |          7822 |    58569 |              13.36
+(1 row)
+
+Time: 0.130 ms
+===== Q14a sebelum VACUUM, rencana apa adanya · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah FROM lab6.event_log WHERE customer_id = 4211;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover_idx on event_log  (cost=0.43..125.01 rows=34 width=14) (actual time=0.076..0.079 rows=33 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 66
+   Buffers: shared hit=40 dirtied=1
+ Planning:
+   Buffers: shared hit=3
+ Planning Time: 0.029 ms
+ Execution Time: 0.084 ms
+(8 rows)
+
+Time: 0.215 ms
+===== Q14a sebelum VACUUM, rencana apa adanya · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah FROM lab6.event_log WHERE customer_id = 4211;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover_idx on event_log  (cost=0.43..125.01 rows=34 width=14) (actual time=0.008..0.012 rows=33 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 33
+   Buffers: shared hit=6
+ Planning Time: 0.030 ms
+ Execution Time: 0.019 ms
+(6 rows)
+
+Time: 0.148 ms
+===== Q14a sebelum VACUUM, rencana apa adanya · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah FROM lab6.event_log WHERE customer_id = 4211;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover_idx on event_log  (cost=0.43..125.01 rows=34 width=14) (actual time=0.006..0.010 rows=33 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 33
+   Buffers: shared hit=6
+ Planning Time: 0.024 ms
+ Execution Time: 0.015 ms
+(6 rows)
+
+Time: 0.129 ms
+BEGIN;
+BEGIN
+Time: 0.041 ms
+SET LOCAL enable_bitmapscan = off;
+SET
+Time: 0.054 ms
+SET LOCAL enable_seqscan = off;
+SET
+Time: 0.046 ms
+===== Q14b sebelum VACUUM, index-only dipaksa · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah FROM lab6.event_log WHERE customer_id = 4211;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover_idx on event_log  (cost=0.43..125.01 rows=34 width=14) (actual time=0.005..0.008 rows=33 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 33
+   Buffers: shared hit=6
+ Planning Time: 0.020 ms
+ Execution Time: 0.013 ms
+(6 rows)
+
+Time: 0.102 ms
+===== Q14b sebelum VACUUM, index-only dipaksa · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah FROM lab6.event_log WHERE customer_id = 4211;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover_idx on event_log  (cost=0.43..125.01 rows=34 width=14) (actual time=0.006..0.010 rows=33 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 33
+   Buffers: shared hit=6
+ Planning Time: 0.024 ms
+ Execution Time: 0.015 ms
+(6 rows)
+
+Time: 0.118 ms
+===== Q14b sebelum VACUUM, index-only dipaksa · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah FROM lab6.event_log WHERE customer_id = 4211;
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover_idx on event_log  (cost=0.43..125.01 rows=34 width=14) (actual time=0.003..0.006 rows=33 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 33
+   Buffers: shared hit=6
+ Planning Time: 0.013 ms
+ Execution Time: 0.009 ms
+(6 rows)
+
+Time: 0.076 ms
+ROLLBACK;
+ROLLBACK
+Time: 0.048 ms
+VACUUM (ANALYZE) lab6.event_log;
+VACUUM
+Time: 480.316 ms
+SELECT 'sesudah VACUUM' AS tahap, relallvisible, relpages,
+       round(100.0*relallvisible/nullif(relpages,0), 2) AS persen_all_visible
+FROM pg_class WHERE oid = 'lab6.event_log'::regclass;
+     tahap      | relallvisible | relpages | persen_all_visible 
+----------------+---------------+----------+--------------------
+ sesudah VACUUM |         58537 |    58570 |              99.94
+(1 row)
+
+Time: 0.416 ms
+===== Q14c sesudah VACUUM · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah FROM lab6.event_log WHERE customer_id = 4211;
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover_idx on event_log  (cost=0.43..9.02 rows=34 width=14) (actual time=0.010..0.012 rows=33 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 0
+   Buffers: shared hit=5
+ Planning:
+   Buffers: shared hit=61
+ Planning Time: 0.112 ms
+ Execution Time: 0.018 ms
+(8 rows)
+
+Time: 0.451 ms
+===== Q14c sesudah VACUUM · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah FROM lab6.event_log WHERE customer_id = 4211;
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover_idx on event_log  (cost=0.43..9.02 rows=34 width=14) (actual time=0.006..0.008 rows=33 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 0
+   Buffers: shared hit=5
+ Planning Time: 0.026 ms
+ Execution Time: 0.014 ms
+(6 rows)
+
+Time: 0.138 ms
+===== Q14c sesudah VACUUM · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT terjadi_pada, jumlah FROM lab6.event_log WHERE customer_id = 4211;
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using ev_cover_idx on event_log  (cost=0.43..9.02 rows=34 width=14) (actual time=0.006..0.008 rows=33 loops=1)
+   Index Cond: (customer_id = 4211)
+   Heap Fetches: 0
+   Buffers: shared hit=5
+ Planning Time: 0.025 ms
+ Execution Time: 0.013 ms
+(6 rows)
+
+Time: 0.132 ms

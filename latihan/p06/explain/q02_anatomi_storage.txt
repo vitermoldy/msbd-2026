@@ -1,0 +1,96 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.291 ms
+SELECT
+    (ctid::text::point)[0] AS page_number,
+    COUNT(*) AS tuple_count
+FROM lab6.event_log
+GROUP BY 1
+ORDER BY 1
+LIMIT 10;
+ page_number | tuple_count 
+-------------+-------------
+           0 |          35
+           1 |          35
+           2 |          35
+           3 |          35
+           4 |          35
+           5 |          35
+           6 |          35
+           7 |          35
+           8 |          35
+           9 |          35
+(10 rows)
+
+Time: 466.984 ms
+SELECT min(tuple_count) AS minimum,
+       round(avg(tuple_count), 2) AS rata_rata,
+       max(tuple_count) AS maksimum,
+       count(*) AS jumlah_halaman
+FROM (
+  SELECT (ctid::text::point)[0]::bigint AS halaman, count(*) AS tuple_count
+  FROM lab6.event_log GROUP BY 1
+) p;
+ minimum | rata_rata | maksimum | jumlah_halaman 
+---------+-----------+----------+----------------
+      11 |     34.15 |       35 |          58569
+(1 row)
+
+Time: 420.943 ms
+SELECT 8192 AS ukuran_halaman,
+       24 AS page_header,
+       4 AS line_pointer,
+       (8192 - 24) / (4 + 24) AS batas_teoretis_tuple,
+       round((pg_relation_size('lab6.event_log') / 2000000.0)::numeric, 1) AS byte_per_baris_nyata,
+       round((8160 / (pg_relation_size('lab6.event_log') / 2000000.0))::numeric, 1) AS perkiraan_tuple_per_halaman;
+ ukuran_halaman | page_header | line_pointer | batas_teoretis_tuple | byte_per_baris_nyata | perkiraan_tuple_per_halaman 
+----------------+-------------+--------------+----------------------+----------------------+-----------------------------
+           8192 |          24 |            4 |                  291 |                239.9 |                        34.0
+(1 row)
+
+Time: 0.435 ms
+SELECT a.attname, format_type(a.atttypid, a.atttypmod) AS tipe, a.attstorage,
+       CASE a.attstorage WHEN 'p' THEN 'plain: tidak bisa dikompresi atau di-TOAST'
+                         WHEN 'm' THEN 'main: boleh dikompresi, TOAST pilihan terakhir'
+                         WHEN 'x' THEN 'extended: boleh dikompresi dan dipindah ke TOAST'
+                         WHEN 'e' THEN 'external: langsung ke TOAST tanpa kompresi' END AS arti
+FROM pg_attribute a
+WHERE a.attrelid = 'lab6.event_log'::regclass AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum;
+     attname     |           tipe           | attstorage |                       arti                       
+-----------------+--------------------------+------------+--------------------------------------------------
+ event_id        | bigint                   | p          | plain: tidak bisa dikompresi atau di-TOAST
+ customer_id     | integer                  | p          | plain: tidak bisa dikompresi atau di-TOAST
+ terjadi_pada    | timestamp with time zone | p          | plain: tidak bisa dikompresi atau di-TOAST
+ status          | text                     | x          | extended: boleh dikompresi dan dipindah ke TOAST
+ wilayah         | text                     | x          | extended: boleh dikompresi dan dipindah ke TOAST
+ kota            | text                     | x          | extended: boleh dikompresi dan dipindah ke TOAST
+ email           | text                     | x          | extended: boleh dikompresi dan dipindah ke TOAST
+ idempotency_key | uuid                     | p          | plain: tidak bisa dikompresi atau di-TOAST
+ jumlah          | numeric(10,2)            | m          | main: boleh dikompresi, TOAST pilihan terakhir
+ tags            | text[]                   | x          | extended: boleh dikompresi dan dipindah ke TOAST
+ payload         | jsonb                    | x          | extended: boleh dikompresi dan dipindah ke TOAST
+(11 rows)
+
+Time: 4.263 ms
+SELECT c.reltoastrelid::regclass AS tabel_toast,
+       pg_size_pretty(pg_relation_size(c.reltoastrelid)) AS ukuran_toast
+FROM pg_class c WHERE c.oid = 'lab6.event_log'::regclass;
+       tabel_toast       | ukuran_toast 
+-------------------------+--------------
+ pg_toast.pg_toast_74057 | 0 bytes
+(1 row)
+
+Time: 0.218 ms
+SELECT max(pg_column_size(payload)) AS payload_terbesar,
+       max(pg_column_size(tags))    AS tags_terbesar,
+       max(pg_column_size(email))   AS email_terbesar,
+       2000 AS ambang_toast_kira_kira
+FROM lab6.event_log;
+ payload_terbesar | tags_terbesar | email_terbesar | ambang_toast_kira_kira 
+------------------+---------------+----------------+------------------------
+               65 |            45 |             25 |                   2000
+(1 row)
+
+Time: 157.000 ms

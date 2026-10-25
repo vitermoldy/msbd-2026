@@ -9,30 +9,30 @@ WHERE n.nspname='lab6' AND relname IN ('tulis_tanpa_index','tulis_lima_index')
 ORDER BY relname;
        tabel       | heap  |  index  | total | total_byte 
 -------------------+-------+---------+-------+------------
- tulis_lima_index  | 45 MB | 27 MB   | 72 MB |   75620352
+ tulis_lima_index  | 45 MB | 27 MB   | 72 MB |   75636736
  tulis_tanpa_index | 45 MB | 0 bytes | 45 MB |   47702016
 (2 rows)
 
-Time: 1.340 ms
+Time: 1.500 ms
 SELECT round(100.0*(pg_total_relation_size('lab6.tulis_lima_index')
                     - pg_total_relation_size('lab6.tulis_tanpa_index'))
              / pg_total_relation_size('lab6.tulis_tanpa_index'), 1) AS persen_lebih_besar;
  persen_lebih_besar 
 --------------------
-               58.5
+               58.6
 (1 row)
 
-Time: 0.292 ms
+Time: 0.293 ms
 SELECT indexrelname AS index, pg_size_pretty(pg_relation_size(indexrelid)) AS ukuran
 FROM pg_stat_user_indexes WHERE schemaname='lab6' AND relname='tulis_lima_index'
 ORDER BY pg_relation_size(indexrelid) DESC;
        index        | ukuran  
 --------------------+---------
  tulis_ekspresi_idx | 14 MB
- tulis_btree_idx    | 8312 kB
- tulis_gin_idx      | 4808 kB
+ tulis_btree_idx    | 8344 kB
+ tulis_gin_idx      | 4792 kB
  tulis_partial_idx  | 176 kB
  tulis_brin_idx     | 24 kB
 (5 rows)
 
-Time: 0.978 ms
+Time: 1.026 ms

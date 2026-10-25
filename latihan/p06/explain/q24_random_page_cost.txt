@@ -1,0 +1,124 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.145 ms
+SHOW random_page_cost;
+ random_page_cost 
+------------------
+ 4
+(1 row)
+
+Time: 0.113 ms
+===== Q24a sapuan dengan random_page_cost = 4 (bawaan)
+DO $$
+DECLARE
+  k int; j json; node text; biaya numeric; batas int;
+BEGIN
+  FOREACH k IN ARRAY ARRAY[20,30,34,36,38,40,50,60,70,80] LOOP
+    batas := 60000 * k / 100;
+    EXECUTE format('EXPLAIN (FORMAT JSON) SELECT sum(length(kota)) FROM lab6.event_log WHERE customer_id <= %s', batas) INTO j;
+    node := j->0->'Plan'->'Plans'->0->>'Node Type';
+    biaya := (j->0->'Plan'->>'Total Cost')::numeric;
+    RAISE NOTICE 'customer_id <= % (sekitar % persen) -> node=% | total_cost=%',
+      lpad(batas::text,5), lpad(k::text,2), rpad(node,18), biaya;
+  END LOOP;
+END $$;
+NOTICE:  customer_id <= 12000 (sekitar 20 persen) -> node=Bitmap Heap Scan   | total_cost=74822.99
+NOTICE:  customer_id <= 18000 (sekitar 30 persen) -> node=Bitmap Heap Scan   | total_cost=82772.90
+NOTICE:  customer_id <= 20400 (sekitar 34 persen) -> node=Bitmap Heap Scan   | total_cost=85877.37
+NOTICE:  customer_id <= 21600 (sekitar 36 persen) -> node=Seq Scan           | total_cost=87106.14
+NOTICE:  customer_id <= 22800 (sekitar 38 persen) -> node=Seq Scan           | total_cost=87301.02
+NOTICE:  customer_id <= 24000 (sekitar 40 persen) -> node=Seq Scan           | total_cost=87508.66
+NOTICE:  customer_id <= 30000 (sekitar 50 persen) -> node=Seq Scan           | total_cost=88492.30
+NOTICE:  customer_id <= 36000 (sekitar 60 persen) -> node=Seq Scan           | total_cost=89522.25
+NOTICE:  customer_id <= 42000 (sekitar 70 persen) -> node=Seq Scan           | total_cost=90526.28
+NOTICE:  customer_id <= 48000 (sekitar 80 persen) -> node=Seq Scan           | total_cost=91509.24
+DO
+Time: 2.158 ms
+SET random_page_cost = 1.1;
+SET
+Time: 0.082 ms
+SHOW random_page_cost;
+ random_page_cost 
+------------------
+ 1.1
+(1 row)
+
+Time: 0.058 ms
+===== Q24b sapuan dengan random_page_cost = 1.1
+DO $$
+DECLARE
+  k int; j json; node text; biaya numeric; batas int;
+BEGIN
+  FOREACH k IN ARRAY ARRAY[20,30,34,36,38,40,50,60,70,80] LOOP
+    batas := 60000 * k / 100;
+    EXECUTE format('EXPLAIN (FORMAT JSON) SELECT sum(length(kota)) FROM lab6.event_log WHERE customer_id <= %s', batas) INTO j;
+    node := j->0->'Plan'->'Plans'->0->>'Node Type';
+    biaya := (j->0->'Plan'->>'Total Cost')::numeric;
+    RAISE NOTICE 'customer_id <= % (sekitar % persen) -> node=% | total_cost=%',
+      lpad(batas::text,5), lpad(k::text,2), rpad(node,18), biaya;
+  END LOOP;
+END $$;
+NOTICE:  customer_id <= 12000 (sekitar 20 persen) -> node=Index Scan         | total_cost=64228.74
+NOTICE:  customer_id <= 18000 (sekitar 30 persen) -> node=Index Scan         | total_cost=70383.60
+NOTICE:  customer_id <= 20400 (sekitar 34 persen) -> node=Index Scan         | total_cost=72787.53
+NOTICE:  customer_id <= 21600 (sekitar 36 persen) -> node=Index Scan         | total_cost=73901.06
+NOTICE:  customer_id <= 22800 (sekitar 38 persen) -> node=Index Scan         | total_cost=75127.51
+NOTICE:  customer_id <= 24000 (sekitar 40 persen) -> node=Index Scan         | total_cost=76434.45
+NOTICE:  customer_id <= 30000 (sekitar 50 persen) -> node=Index Scan         | total_cost=82625.91
+NOTICE:  customer_id <= 36000 (sekitar 60 persen) -> node=Seq Scan           | total_cost=89522.25
+NOTICE:  customer_id <= 42000 (sekitar 70 persen) -> node=Seq Scan           | total_cost=90526.28
+NOTICE:  customer_id <= 48000 (sekitar 80 persen) -> node=Seq Scan           | total_cost=91509.24
+DO
+Time: 0.627 ms
+===== Q24c status SUKSES dengan random_page_cost 1.1 · run 1
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'SUKSES';
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83571.00 rows=1681067 width=194) (actual time=0.011..126.470 rows=1680000 loops=1)
+   Filter: (status = 'SUKSES'::text)
+   Rows Removed by Filter: 320000
+   Buffers: shared hit=16192 read=42378
+ Planning:
+   Buffers: shared hit=32 read=6
+ Planning Time: 0.077 ms
+ Execution Time: 160.090 ms
+(8 rows)
+
+Time: 160.397 ms
+===== Q24c status SUKSES dengan random_page_cost 1.1 · run 2
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'SUKSES';
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83571.00 rows=1681067 width=194) (actual time=0.225..130.247 rows=1680000 loops=1)
+   Filter: (status = 'SUKSES'::text)
+   Rows Removed by Filter: 320000
+   Buffers: shared hit=16192 read=42378
+ Planning Time: 0.074 ms
+ Execution Time: 166.909 ms
+(6 rows)
+
+Time: 167.333 ms
+===== Q24c status SUKSES dengan random_page_cost 1.1 · run 3
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM lab6.event_log WHERE status = 'SUKSES';
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83571.00 rows=1681067 width=194) (actual time=0.231..137.221 rows=1680000 loops=1)
+   Filter: (status = 'SUKSES'::text)
+   Rows Removed by Filter: 320000
+   Buffers: shared hit=16224 read=42346
+ Planning Time: 0.075 ms
+ Execution Time: 176.886 ms
+(6 rows)
+
+Time: 177.322 ms
+RESET random_page_cost;
+RESET
+Time: 0.303 ms
+SHOW random_page_cost;
+ random_page_cost 
+------------------
+ 4
+(1 row)
+
+Time: 0.085 ms

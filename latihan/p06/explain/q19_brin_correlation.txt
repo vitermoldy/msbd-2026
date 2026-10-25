@@ -1,0 +1,92 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.138 ms
+CREATE INDEX IF NOT EXISTS idx_brin_terjadi ON lab6.event_log
+    USING brin (terjadi_pada) WITH (pages_per_range = 128);
+CREATE INDEX
+Time: 95.004 ms
+CREATE INDEX IF NOT EXISTS idx_btree_terjadi ON lab6.event_log (terjadi_pada);
+CREATE INDEX
+Time: 434.790 ms
+ANALYZE lab6.event_log;
+ANALYZE
+Time: 340.607 ms
+SELECT tablename, attname, n_distinct, correlation
+FROM pg_stats
+WHERE schemaname = 'lab6' AND tablename = 'event_log'
+  AND attname IN ('terjadi_pada','event_id','customer_id','status')
+ORDER BY correlation DESC NULLS LAST;
+ tablename |   attname    | n_distinct |  correlation  
+-----------+--------------+------------+---------------
+ event_log | event_id     |         -1 |             1
+ event_log | terjadi_pada |         -1 |             1
+ event_log | status       |          3 |      0.727324
+ event_log | customer_id  |      58939 | -0.0069969045
+(4 rows)
+
+Time: 2.499 ms
+SELECT
+    pg_size_pretty(pg_relation_size('lab6.idx_brin_terjadi')) AS ukuran_brin,
+    pg_size_pretty(pg_relation_size('lab6.idx_btree_terjadi')) AS ukuran_btree,
+    pg_size_pretty(pg_relation_size('lab6.event_log')) AS ukuran_heap,
+    round(pg_relation_size('lab6.idx_btree_terjadi')::numeric
+          / pg_relation_size('lab6.idx_brin_terjadi'), 0) AS btree_berapa_kali_brin;
+ ukuran_brin | ukuran_btree | ukuran_heap | btree_berapa_kali_brin 
+-------------+--------------+-------------+------------------------
+ 32 kB       | 43 MB        | 458 MB      |                   1372
+(1 row)
+
+Time: 0.322 ms
+CREATE INDEX IF NOT EXISTS idx_brin_customer ON lab6.event_log
+    USING brin (customer_id) WITH (pages_per_range = 128);
+CREATE INDEX
+Time: 97.461 ms
+SELECT 'BRIN terjadi_pada (correlation mendekati 1)' AS varian,
+       pg_size_pretty(pg_relation_size('lab6.idx_brin_terjadi')) AS ukuran
+UNION ALL
+SELECT 'BRIN customer_id (correlation mendekati 0)',
+       pg_size_pretty(pg_relation_size('lab6.idx_brin_customer'));
+                   varian                    | ukuran 
+---------------------------------------------+--------
+ BRIN terjadi_pada (correlation mendekati 1) | 32 kB
+ BRIN customer_id (correlation mendekati 0)  | 32 kB
+(2 rows)
+
+Time: 0.319 ms
+===== Q19 BRIN pada customer_id saat dipaksa dipakai · run 1
+BEGIN;
+BEGIN
+Time: 0.273 ms
+DROP INDEX lab6.ev_benar_idx;
+DROP INDEX
+Time: 0.252 ms
+DROP INDEX lab6.ev_cover3_idx;
+DROP INDEX
+Time: 0.291 ms
+SET LOCAL enable_seqscan = off;
+SET
+Time: 0.052 ms
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT count(*) FROM lab6.event_log WHERE customer_id = 4211;
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=45772.85..45772.86 rows=1 width=8) (actual time=36.785..36.786 rows=1 loops=1)
+   Buffers: shared hit=44 read=7694 dirtied=33
+   ->  Index Only Scan using ev_salah_idx on event_log  (cost=0.43..45772.77 rows=34 width=0) (actual time=0.055..36.766 rows=33 loops=1)
+         Index Cond: (customer_id = 4211)
+         Heap Fetches: 33
+         Buffers: shared hit=44 read=7694 dirtied=33
+ Planning:
+   Buffers: shared hit=59 read=7
+ Planning Time: 0.137 ms
+ Execution Time: 36.800 ms
+(10 rows)
+
+Time: 37.217 ms
+ROLLBACK;
+ROLLBACK
+Time: 0.236 ms
+DROP INDEX lab6.idx_brin_customer;
+DROP INDEX
+Time: 1.963 ms

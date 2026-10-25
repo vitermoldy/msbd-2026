@@ -1,11 +1,114 @@
-latihan=# SELECT pg_size_pretty(pg_relation_size('lab6.ev_salah_idx'));
- pg_size_pretty 
-----------------
- 60 MB
-(1 row)
+Timing is on.
+CREATE EXTENSION IF NOT EXISTS pgstattuple;
+NOTICE:  extension "pgstattuple" already exists, skipping
+CREATE EXTENSION
+Time: 1.754 ms
+CREATE INDEX IF NOT EXISTS ev_salah_idx
+ON lab6.event_log (terjadi_pada, customer_id);
+CREATE INDEX
+Time: 423.326 ms
+SELECT indexrelname AS index,
+       pg_size_pretty(pg_relation_size(indexrelid)) AS ukuran,
+       pg_relation_size(indexrelid) AS byte,
+       pg_relation_size(indexrelid)/8192 AS halaman
+FROM pg_stat_user_indexes
+WHERE schemaname = 'lab6' AND indexrelname IN ('ev_salah_idx','ev_benar_idx')
+ORDER BY indexrelname;
+    index     | ukuran |   byte   | halaman 
+--------------+--------+----------+---------
+ ev_benar_idx | 60 MB  | 63102976 |    7703
+ ev_salah_idx | 60 MB  | 63012864 |    7692
+(2 rows)
 
-latihan=# SELECT pg_size_pretty(pg_relation_size('lab6.ev_benar_idx'));
- pg_size_pretty 
-----------------
- 60 MB
-(1 row)
+Time: 3.065 ms
+SELECT c.relname AS index, s.leaf_pages, s.internal_pages, s.avg_leaf_density
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+CROSS JOIN LATERAL pgstatindex(c.oid) s
+WHERE n.nspname = 'lab6' AND c.relname IN ('ev_salah_idx','ev_benar_idx')
+ORDER BY c.relname;
+    index     | leaf_pages | internal_pages | avg_leaf_density 
+--------------+------------+----------------+------------------
+ ev_benar_idx |       7663 |             39 |            90.03
+ ev_salah_idx |       7663 |             28 |            89.94
+(2 rows)
+
+Time: 17.713 ms
+CREATE INDEX ev_ff50_idx ON lab6.event_log (customer_id, terjadi_pada DESC) WITH (fillfactor=50);
+CREATE INDEX
+Time: 615.251 ms
+SELECT 'fillfactor 90 (bawaan)' AS varian, pg_size_pretty(pg_relation_size('lab6.ev_benar_idx')) AS ukuran
+UNION ALL
+SELECT 'fillfactor 50', pg_size_pretty(pg_relation_size('lab6.ev_ff50_idx'));
+         varian         | ukuran 
+------------------------+--------
+ fillfactor 90 (bawaan) | 60 MB
+ fillfactor 50          | 109 MB
+(2 rows)
+
+Time: 0.313 ms
+DROP INDEX lab6.ev_ff50_idx;
+DROP INDEX
+Time: 8.482 ms
+CREATE INDEX ev_status_dedup_idx ON lab6.event_log (status);
+CREATE INDEX
+Time: 470.032 ms
+CREATE INDEX ev_status_id_idx    ON lab6.event_log (status, event_id);
+CREATE INDEX
+Time: 846.803 ms
+SELECT 'status (3 nilai berulang, deduplikasi aktif)' AS varian,
+       pg_size_pretty(pg_relation_size('lab6.ev_status_dedup_idx')) AS ukuran
+UNION ALL
+SELECT 'status + event_id (setiap kunci unik, tidak bisa dideduplikasi)',
+       pg_size_pretty(pg_relation_size('lab6.ev_status_id_idx'));
+                             varian                              | ukuran 
+-----------------------------------------------------------------+--------
+ status (3 nilai berulang, deduplikasi aktif)                    | 13 MB
+ status + event_id (setiap kunci unik, tidak bisa dideduplikasi) | 63 MB
+(2 rows)
+
+Time: 0.283 ms
+DROP INDEX lab6.ev_status_dedup_idx;
+DROP INDEX
+Time: 1.879 ms
+DROP INDEX lab6.ev_status_id_idx;
+DROP INDEX
+Time: 5.358 ms
+DROP TABLE IF EXISTS lab6.urut_acak, lab6.urut_sekali;
+NOTICE:  table "urut_acak" does not exist, skipping
+NOTICE:  table "urut_sekali" does not exist, skipping
+DROP TABLE
+Time: 0.131 ms
+CREATE TABLE lab6.urut_acak (customer_id integer, terjadi_pada timestamptz);
+CREATE TABLE
+Time: 1.108 ms
+CREATE INDEX urut_acak_idx ON lab6.urut_acak (customer_id, terjadi_pada DESC);
+CREATE INDEX
+Time: 0.900 ms
+INSERT INTO lab6.urut_acak SELECT customer_id, terjadi_pada FROM lab6.event_log
+WHERE event_id <= 500000 ORDER BY random();
+INSERT 0 500000
+Time: 825.071 ms
+CREATE TABLE lab6.urut_sekali AS SELECT customer_id, terjadi_pada FROM lab6.event_log
+WHERE event_id <= 500000;
+SELECT 500000
+Time: 171.659 ms
+CREATE INDEX urut_sekali_idx ON lab6.urut_sekali (customer_id, terjadi_pada DESC);
+CREATE INDEX
+Time: 112.232 ms
+SELECT 'diisi bertahap lewat INSERT' AS varian,
+       pg_size_pretty(pg_relation_size('lab6.urut_acak_idx')) AS ukuran,
+       (SELECT round(avg_leaf_density::numeric,1) FROM pgstatindex('lab6.urut_acak_idx')) AS kerapatan_daun
+UNION ALL
+SELECT 'dibangun sekaligus oleh CREATE INDEX',
+       pg_size_pretty(pg_relation_size('lab6.urut_sekali_idx')),
+       (SELECT round(avg_leaf_density::numeric,1) FROM pgstatindex('lab6.urut_sekali_idx'));
+                varian                | ukuran | kerapatan_daun 
+--------------------------------------+--------+----------------
+ diisi bertahap lewat INSERT          | 19 MB  |           72.1
+ dibangun sekaligus oleh CREATE INDEX | 15 MB  |           90.0
+(2 rows)
+
+Time: 3.874 ms
+DROP TABLE lab6.urut_acak, lab6.urut_sekali;
+DROP TABLE
+Time: 7.903 ms

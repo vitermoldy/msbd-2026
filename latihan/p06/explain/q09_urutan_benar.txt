@@ -1,37 +1,83 @@
-                                                        === Percobaan 1 ===
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.169 ms
+DROP INDEX IF EXISTS lab6.ev_salah_idx;
+DROP INDEX
+Time: 7.103 ms
+CREATE INDEX ev_benar_idx
+ON lab6.event_log (customer_id, terjadi_pada DESC);
+CREATE INDEX
+Time: 608.455 ms
+ANALYZE lab6.event_log;
+ANALYZE
+Time: 231.420 ms
+SELECT pg_size_pretty(pg_relation_size('lab6.ev_benar_idx')) AS ukuran_ev_benar_idx;
+ ukuran_ev_benar_idx 
+---------------------
+ 60 MB
+(1 row)
+
+Time: 0.476 ms
+===== Q9 urutan benar · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT event_id, jumlah
+FROM lab6.event_log
+WHERE customer_id = 4211
+  AND terjadi_pada >= timestamptz '2024-06-01 00:00+07'
+ORDER BY terjadi_pada DESC
+LIMIT 20;
                                                             QUERY PLAN                                                            
 ----------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=0.43..72.77 rows=17 width=22) (actual time=0.049..0.084 rows=12 loops=1)
-   Buffers: shared hit=12 read=3
-   ->  Index Scan using ev_benar_idx on event_log  (cost=0.43..72.77 rows=17 width=22) (actual time=0.046..0.078 rows=12 loops=1)
+ Limit  (cost=0.43..72.77 rows=17 width=22) (actual time=0.014..0.034 rows=15 loops=1)
+   Buffers: shared hit=15 read=3
+   ->  Index Scan using ev_benar_idx on event_log  (cost=0.43..72.77 rows=17 width=22) (actual time=0.013..0.032 rows=15 loops=1)
          Index Cond: ((customer_id = 4211) AND (terjadi_pada >= '2024-05-31 17:00:00+00'::timestamp with time zone))
-         Buffers: shared hit=12 read=3
+         Buffers: shared hit=15 read=3
  Planning:
-   Buffers: shared hit=22 read=1 dirtied=3
- Planning Time: 0.594 ms
- Execution Time: 0.121 ms
+   Buffers: shared hit=49 read=1
+ Planning Time: 0.112 ms
+ Execution Time: 0.044 ms
 (9 rows)
 
-                                                        === Percobaan 2 ===
+Time: 0.701 ms
+===== Q9 urutan benar · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT event_id, jumlah
+FROM lab6.event_log
+WHERE customer_id = 4211
+  AND terjadi_pada >= timestamptz '2024-06-01 00:00+07'
+ORDER BY terjadi_pada DESC
+LIMIT 20;
                                                             QUERY PLAN                                                            
 ----------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=0.43..72.77 rows=17 width=22) (actual time=0.041..0.114 rows=12 loops=1)
-   Buffers: shared hit=15
-   ->  Index Scan using ev_benar_idx on event_log  (cost=0.43..72.77 rows=17 width=22) (actual time=0.039..0.109 rows=12 loops=1)
+ Limit  (cost=0.43..72.77 rows=17 width=22) (actual time=0.007..0.014 rows=15 loops=1)
+   Buffers: shared hit=18
+   ->  Index Scan using ev_benar_idx on event_log  (cost=0.43..72.77 rows=17 width=22) (actual time=0.006..0.013 rows=15 loops=1)
          Index Cond: ((customer_id = 4211) AND (terjadi_pada >= '2024-05-31 17:00:00+00'::timestamp with time zone))
-         Buffers: shared hit=15
- Planning Time: 0.213 ms
- Execution Time: 0.145 ms
+         Buffers: shared hit=18
+ Planning Time: 0.029 ms
+ Execution Time: 0.020 ms
 (7 rows)
 
-                                                        === Percobaan 3 ===
+Time: 0.156 ms
+===== Q9 urutan benar · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT event_id, jumlah
+FROM lab6.event_log
+WHERE customer_id = 4211
+  AND terjadi_pada >= timestamptz '2024-06-01 00:00+07'
+ORDER BY terjadi_pada DESC
+LIMIT 20;
                                                             QUERY PLAN                                                            
 ----------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=0.43..72.77 rows=17 width=22) (actual time=0.055..0.144 rows=12 loops=1)
-   Buffers: shared hit=15
-   ->  Index Scan using ev_benar_idx on event_log  (cost=0.43..72.77 rows=17 width=22) (actual time=0.053..0.139 rows=12 loops=1)
+ Limit  (cost=0.43..72.77 rows=17 width=22) (actual time=0.006..0.014 rows=15 loops=1)
+   Buffers: shared hit=18
+   ->  Index Scan using ev_benar_idx on event_log  (cost=0.43..72.77 rows=17 width=22) (actual time=0.006..0.013 rows=15 loops=1)
          Index Cond: ((customer_id = 4211) AND (terjadi_pada >= '2024-05-31 17:00:00+00'::timestamp with time zone))
-         Buffers: shared hit=15
- Planning Time: 0.307 ms
- Execution Time: 0.185 ms
+         Buffers: shared hit=18
+ Planning Time: 0.036 ms
+ Execution Time: 0.021 ms
 (7 rows)
+
+Time: 0.159 ms

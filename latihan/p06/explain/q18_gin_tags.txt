@@ -1,0 +1,193 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.150 ms
+CREATE INDEX IF NOT EXISTS idx_gin_tags ON lab6.event_log USING gin (tags);
+CREATE INDEX
+Time: 939.243 ms
+ANALYZE lab6.event_log;
+ANALYZE
+Time: 329.974 ms
+SELECT pg_size_pretty(pg_relation_size('lab6.idx_gin_tags')) AS ukuran_gin_tags,
+       (SELECT count(*) FROM lab6.event_log WHERE tags @> ARRAY['kanal:1']) AS baris_satu_tag,
+       (SELECT count(*) FROM lab6.event_log WHERE tags @> ARRAY['kanal:1','sumber:1']) AS baris_dua_tag;
+ ukuran_gin_tags | baris_satu_tag | baris_dua_tag 
+-----------------+----------------+---------------
+ 4664 kB         |         500000 |        166667
+(1 row)
+
+Time: 365.799 ms
+===== Q18a satu tag dengan GIN · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE tags @> ARRAY['kanal:1'];
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=3432.65..68338.37 rows=506858 width=194) (actual time=33.872..173.804 rows=500000 loops=1)
+   Recheck Cond: (tags @> '{kanal:1}'::text[])
+   Heap Blocks: exact=58570
+   Buffers: shared hit=1 read=58645 written=6
+   ->  Bitmap Index Scan on idx_gin_tags  (cost=0.00..3305.93 rows=506858 width=0) (actual time=26.450..26.451 rows=500000 loops=1)
+         Index Cond: (tags @> '{kanal:1}'::text[])
+         Buffers: shared hit=1 read=75
+ Planning:
+   Buffers: shared hit=24 read=9 dirtied=7
+ Planning Time: 0.147 ms
+ Execution Time: 185.791 ms
+(11 rows)
+
+Time: 186.270 ms
+===== Q18a satu tag dengan GIN · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE tags @> ARRAY['kanal:1'];
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=3432.65..68338.37 rows=506858 width=194) (actual time=32.462..169.479 rows=500000 loops=1)
+   Recheck Cond: (tags @> '{kanal:1}'::text[])
+   Heap Blocks: exact=58570
+   Buffers: shared hit=1 read=58645
+   ->  Bitmap Index Scan on idx_gin_tags  (cost=0.00..3305.93 rows=506858 width=0) (actual time=24.921..24.922 rows=500000 loops=1)
+         Index Cond: (tags @> '{kanal:1}'::text[])
+         Buffers: shared hit=1 read=75
+ Planning:
+   Buffers: shared read=1
+ Planning Time: 0.084 ms
+ Execution Time: 181.403 ms
+(11 rows)
+
+Time: 181.789 ms
+===== Q18a satu tag dengan GIN · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE tags @> ARRAY['kanal:1'];
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=3432.65..68338.37 rows=506858 width=194) (actual time=32.960..171.483 rows=500000 loops=1)
+   Recheck Cond: (tags @> '{kanal:1}'::text[])
+   Heap Blocks: exact=58570
+   Buffers: shared hit=1 read=58645
+   ->  Bitmap Index Scan on idx_gin_tags  (cost=0.00..3305.93 rows=506858 width=0) (actual time=25.584..25.585 rows=500000 loops=1)
+         Index Cond: (tags @> '{kanal:1}'::text[])
+         Buffers: shared hit=1 read=75
+ Planning:
+   Buffers: shared read=1
+ Planning Time: 0.085 ms
+ Execution Time: 183.068 ms
+(11 rows)
+
+Time: 183.589 ms
+===== Q18b dua tag dengan GIN · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE tags @> ARRAY['kanal:1','sumber:1'];
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=1580.00..62260.64 rows=168851 width=194) (actual time=39.336..162.499 rows=166667 loops=1)
+   Recheck Cond: (tags @> '{kanal:1,sumber:1}'::text[])
+   Heap Blocks: exact=58569
+   Buffers: shared hit=79 read=58739
+   ->  Bitmap Index Scan on idx_gin_tags  (cost=0.00..1537.79 rows=168851 width=0) (actual time=31.708..31.708 rows=166667 loops=1)
+         Index Cond: (tags @> '{kanal:1,sumber:1}'::text[])
+         Buffers: shared hit=79 read=170
+ Planning:
+   Buffers: shared read=1
+ Planning Time: 0.085 ms
+ Execution Time: 166.411 ms
+(11 rows)
+
+Time: 166.762 ms
+===== Q18b dua tag dengan GIN · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE tags @> ARRAY['kanal:1','sumber:1'];
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=1580.00..62260.64 rows=168851 width=194) (actual time=36.019..170.258 rows=166667 loops=1)
+   Recheck Cond: (tags @> '{kanal:1,sumber:1}'::text[])
+   Heap Blocks: exact=58569
+   Buffers: shared hit=79 read=58739
+   ->  Bitmap Index Scan on idx_gin_tags  (cost=0.00..1537.79 rows=168851 width=0) (actual time=28.947..28.948 rows=166667 loops=1)
+         Index Cond: (tags @> '{kanal:1,sumber:1}'::text[])
+         Buffers: shared hit=79 read=170
+ Planning:
+   Buffers: shared read=1
+ Planning Time: 0.096 ms
+ Execution Time: 174.895 ms
+(11 rows)
+
+Time: 175.318 ms
+===== Q18b dua tag dengan GIN · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE tags @> ARRAY['kanal:1','sumber:1'];
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=1580.00..62260.64 rows=168851 width=194) (actual time=39.311..160.597 rows=166667 loops=1)
+   Recheck Cond: (tags @> '{kanal:1,sumber:1}'::text[])
+   Heap Blocks: exact=58569
+   Buffers: shared hit=79 read=58739
+   ->  Bitmap Index Scan on idx_gin_tags  (cost=0.00..1537.79 rows=168851 width=0) (actual time=31.489..31.489 rows=166667 loops=1)
+         Index Cond: (tags @> '{kanal:1,sumber:1}'::text[])
+         Buffers: shared hit=79 read=170
+ Planning:
+   Buffers: shared read=1
+ Planning Time: 0.117 ms
+ Execution Time: 164.708 ms
+(11 rows)
+
+Time: 165.096 ms
+SET enable_indexscan = off;
+SET
+Time: 0.121 ms
+SET enable_bitmapscan = off;
+SET
+Time: 0.085 ms
+===== Q18c satu tag tanpa GIN · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE tags @> ARRAY['kanal:1'];
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83569.57 rows=506858 width=194) (actual time=0.048..302.660 rows=500000 loops=1)
+   Filter: (tags @> '{kanal:1}'::text[])
+   Rows Removed by Filter: 1500000
+   Buffers: shared hit=16351 read=42219
+ Planning:
+   Buffers: shared read=1
+ Planning Time: 0.082 ms
+ Execution Time: 316.079 ms
+(8 rows)
+
+Time: 316.448 ms
+===== Q18c satu tag tanpa GIN · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE tags @> ARRAY['kanal:1'];
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83569.57 rows=506858 width=194) (actual time=0.191..299.882 rows=500000 loops=1)
+   Filter: (tags @> '{kanal:1}'::text[])
+   Rows Removed by Filter: 1500000
+   Buffers: shared hit=16351 read=42219
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.076 ms
+ Execution Time: 313.200 ms
+(8 rows)
+
+Time: 313.615 ms
+===== Q18c satu tag tanpa GIN · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE tags @> ARRAY['kanal:1'];
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83569.57 rows=506858 width=194) (actual time=0.223..295.660 rows=500000 loops=1)
+   Filter: (tags @> '{kanal:1}'::text[])
+   Rows Removed by Filter: 1500000
+   Buffers: shared hit=16351 read=42219
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.076 ms
+ Execution Time: 308.972 ms
+(8 rows)
+
+Time: 309.318 ms
+SET enable_indexscan = on;
+SET
+Time: 0.145 ms
+SET enable_bitmapscan = on;
+SET
+Time: 0.102 ms

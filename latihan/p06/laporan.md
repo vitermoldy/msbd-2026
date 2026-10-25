@@ -12,9 +12,20 @@
 | Merge request | «isi tautan setelah pull request dibuka» |
 | Tanggal pengerjaan | 5 Oktober 2026 – … |
 
-> **Status laporan.** Bagian yang sudah terisi ditandai dengan angka dan keluaran asli dari
-> `explain/`. Bagian yang belum ditandai «Belum diisi» beserta penanggung jawabnya. Tidak ada
-> kotak yang diisi dengan angka perkiraan.
+> **Status laporan.** Seluruh Q1–Q31 terisi dengan angka dan keluaran asli dari `explain/`.
+> Tidak ada kotak yang diisi dengan angka perkiraan.
+>
+> **Catatan pengukuran ulang (25 Oktober 2026).** Berkas SQL Langkah 2 sampai Langkah 6
+> awalnya belum memenuhi dua aturan pengukuran yang diwajibkan soal: setiap query harus
+> dijalankan **tiga kali** dan `max_parallel_workers_per_gather` harus disetel **0**. Berkas
+> itu kemudian dilengkapi tanpa mengubah query yang diuji, lalu **seluruh rangkaian Q0–Q30
+> dijalankan ulang dari nol pada satu mesin** sehingga `idx_scan` pada Q29 dan rekomendasi
+> pada Q30 berdiri di atas keadaan basis data yang sama. Tiga kesalahan yang ditemukan saat
+> pengerjaan ulang itu diperbaiki dan dicatat di tempatnya masing-masing: index BRIN tidak
+> pernah dibuat berkas mana pun (Q19), nama index ditulis tanpa skema (Q17), dan nilai `kota`
+> yang diuji tidak pernah ada di data (Q25). Narasi Q17–Q26 ditulis dari pengukuran pertama
+> penulisnya; bila angkanya berbeda dengan isi `explain/`, berkas `explain/` yang berlaku
+> karena itulah hasil jalan ulang yang memenuhi aturan tiga kali uji.
 
 ---
 
@@ -108,41 +119,23 @@ sampel, bukan hitungan persis.
 
 ### Langkah 2 · Anatomi penyimpanan
 
-**Q2 · Tuple per halaman.** Berkas: `q02_anatomi_storage.sql`. Cantumkan minimum, rata-rata,
-dan maksimum tuple per halaman dari `ctid`, lalu jelaskan selisihnya terhadap batas teoretis
-291 tuple.
+**Q2 · Tuple per halaman.** Berkas: `q02_anatomi_storage.sql`
+(keluaran: `explain/q02_anatomi_storage.txt`).
 
-**Kode**
-SET max_parallel_workers_per_gather = 0;
+| Ukuran | Nilai |
+|---|---:|
+| Minimum tuple per halaman | 11 |
+| Rata-rata | **34,15** |
+| Maksimum | 35 |
+| Jumlah halaman | 58.569 |
+| Batas teoretis | **291** |
 
-SELECT
-    (ctid::text::point)[0] AS page_number,
-    COUNT(*) AS tuple_count
-FROM lab6.event_log
-GROUP BY page_number
-ORDER BY page_number
-LIMIT 10;
-
-
-**Output**
-
-page_number | tuple_count 
--------------+-------------
-           0 |          34
-           1 |          35
-           2 |          34
-           3 |          34
-           4 |          35
-           5 |          34
-           6 |          34
-           7 |          35
-           8 |          34
-           9 |          34
-
-**Penjelasan**
-Query ini mengekstrak nomor halaman (page ID) dari kolom semu ctid untuk menghitung jumlah baris (tuple) yang tersimpan secara fisik di setiap blok memori (8 KB). Hasil perhitungan menunjukkan rata-rata ~45 tuple per halaman, jauh di bawah batas teoretis 291 tuple. Hal ini terjadi karena batas teoretis berasumsi header tuple tanpa data beban (payload), sedangkan data aktual tabel lab6.event_log memiliki kolom UUID, JSONB, ARRAY, dan TIMESTAMPTZ yang menghasilkan ukuran rata-rata baris ~180 bytes.
-
-> «Belum diisi.»
+**Penafsiran.** Batas 291 berlaku untuk tuple berukuran minimum:
+`(8192 − 24 header halaman) / (4 line pointer + 24 header tuple) = 291`. Baris `event_log`
+lebarnya 239,9 byte, jadi yang muat hanya `8160 / 239,9 ≈ 34` — dan itu persis rata-rata yang
+terukur, 34,15. Jadi selisih 291 lawan 34 bukan soal kerugian ruang, melainkan selisih antara
+batas struktur halaman dan lebar baris nyata. Nilai minimum 11 datang dari halaman terakhir
+yang belum penuh, dan maksimum 35 dari halaman yang barisnya kebetulan sedikit lebih pendek.
 
 **Q3 · TOAST.** Cantumkan `attstorage` setiap kolom, sebutkan kolom yang bernilai `x` atau `e`,
 dan jelaskan akibatnya pada `SELECT *`.
@@ -245,36 +238,87 @@ Query ini mengukur ukuran penyimpanan fisik kedua tabel menggunakan fungsi pg_re
 **Q6 · Reflektif.** *Bandingkan UPDATE kolom terindeks dan tidak terindeks. Mengapa satu
 skenario menghasilkan HOT update sedangkan lainnya tidak?*
 
-**Kode**
-UPDATE lab6.hot_longgar SET id = id + 100000;
+Percobaan pada `lab6.hot_longgar` (fillfactor 80, index `hot_longgar_nama_idx` pada kolom
+`nama`), masing-masing 5.000 baris:
 
-SELECT 
-    relname AS nama_tabel,
-    n_tup_upd AS total_update,
-    n_tup_hot_upd AS total_hot_update
-FROM pg_stat_user_tables
-WHERE relname = 'hot_longgar';
+| Tahap | `n_tup_upd` | `n_tup_hot_upd` | Tambahan HOT |
+|---|---:|---:|---:|
+| Sesudah UPDATE kolom `catatan` seluruh tabel (Q4) | 10.000 | 2.560 | — |
+| Sesudah UPDATE kolom **`nama` yang terindeks** | 15.000 | 2.560 | **0** |
+| Sesudah UPDATE kolom **`catatan` yang tidak terindeks** | 20.000 | 5.537 | **2.977** |
 
-**Output**
-nama_tabel  | total_update | total_hot_update | persentase_hot_pct 
--------------+--------------+------------------+--------------------
- hot_longgar |        20000 |            10000 |              50.00
+**Jawaban.** HOT update hanya mungkin bila dua syarat terpenuhi sekaligus: versi baris yang
+baru masih muat di halaman yang sama, dan **tidak ada kolom terindeks yang berubah**. Syarat
+kedua itulah yang membedakan kedua percobaan di atas. Ketika `nama` diubah, nilai kunci pada
+`hot_longgar_nama_idx` ikut berubah, sehingga index wajib menunjuk ke versi baris yang baru —
+dan entri index tidak bisa menunjuk ke rantai HOT, karena rantai itu justru dirancang supaya
+index lama tetap sah tanpa diperbarui. Akibatnya PostgreSQL membuat entri index baru dan
+update itu bukan HOT. Ketika `catatan` yang diubah, tidak ada satu pun index yang memuat kolom
+itu, jadi penunjuk lama tetap benar dan versi baru cukup dirantai di halaman yang sama.
 
-**Penjelasan**
-Skenario UPDATE pada kolom tidak terindeks menghasilkan HOT update karena pointer B-Tree indeks yang lama masih valid menunjuk ke halaman yang sama. Sebaliknya, UPDATE pada kolom terindeks (id) membatalkan skema HOT update karena perubahan nilai kunci mewajibkan PostgreSQL untuk membuat pointer indeks B-Tree yang baru, sehingga memicu operasi penulisan ke indeks (index write) dan meningkatkan beban I/O database.
-> «Belum diisi.»
+Bukti angkanya bersih: jumlah baris yang di-UPDATE persis sama (5.000), tabelnya sama,
+fillfactor-nya sama, dan satu-satunya pembeda adalah kolom mana yang disentuh — hasilnya 0
+lawan 2.977 HOT update. Inilah alasan praktisnya: menambah index bukan hanya menambah ruang
+dan biaya INSERT, tetapi juga **mengurangi peluang UPDATE menjadi HOT** pada kolom yang
+diindeks, sehingga tabel lebih cepat membengkak.
 
 ### Langkah 3 · Baseline, B-Tree, dan urutan kolom
 
-**Q7 · Baseline tanpa index.** Berkas: `q07_baseline.sql`. Cantumkan jenis node, baris
-estimasi dan nyata, Buffers, waktu tercepat, dan median.
+**Q7 · Baseline tanpa index.** Berkas: `q07_baseline.sql`
+(keluaran: `explain/q07_baseline.txt`). Saat berkas ini dijalankan, satu-satunya index pada
+`lab6.event_log` adalah `event_log_pkey`.
 
-> «Belum diisi.»
+```text
+ Limit  (cost=88572.35..88572.39 rows=17 width=22) (actual time=92.335..92.337 rows=19 loops=1)
+   Buffers: shared hit=3 read=58569
+   ->  Sort  (cost=88572.35..88572.39 rows=17 width=22)
+         Sort Key: terjadi_pada DESC
+         Sort Method: quicksort  Memory: 26kB
+         ->  Seq Scan on event_log  (cost=0.00..88572.00 rows=17 width=22)
+               Filter: ((terjadi_pada >= '2024-05-31 17:00:00+00') AND (customer_id = 4211))
+               Rows Removed by Filter: 1999985
+ Execution Time: 92.366 ms
+```
 
-**Q8 · Urutan salah.** Berkas: `q08_urutan_salah.sql`. Apakah `ev_salah_idx` dipakai, dan
-apakah masih ada node `Sort`?
+| Hal | Nilai |
+|---|---|
+| Jenis node | **Seq Scan** diikuti **Sort** |
+| Baris estimasi lawan nyata | 17 lawan 19 |
+| Baris dibuang filter | **1.999.985** |
+| Buffers | **58.572** (hampir seluruh tabel) |
+| Tercepat | **92,366 ms** |
+| Median | **93,084 ms** |
 
-> «Belum diisi.»
+**Penafsiran.** Untuk memperoleh 19 baris, PostgreSQL membaca dua juta baris dan membuang
+1.999.985 di antaranya, lalu masih harus mengurutkan hasilnya karena tidak ada urutan yang
+bisa dipinjam dari mana pun. Inilah garis dasar yang akan dibandingkan pada Q8 dan Q9.
+
+**Q8 · Urutan salah.** Berkas: `q08_urutan_salah.sql`
+(keluaran: `explain/q08_urutan_salah.txt`). `ev_salah_idx (terjadi_pada, customer_id)`
+berukuran **60 MB**.
+
+```text
+ Limit  (cost=0.43..25058.56 rows=17 width=22) (actual time=0.055..9.828 rows=19 loops=1)
+   Buffers: shared hit=3825
+   ->  Index Scan Backward using ev_salah_idx on event_log
+         Index Cond: ((terjadi_pada >= '2024-05-31 17:00:00+00') AND (customer_id = 4211))
+ Execution Time: 9.847 ms
+```
+
+**Apakah index dipakai?** Ya. **Apakah masih ada Sort?** Tidak — node `Sort` hilang sama
+sekali, dan seluruh berkas keluarannya tidak memuat satu pun kata `Sort`.
+
+| Keadaan | Node | Tercepat | Median | Buffers |
+|---|---|---:|---:|---:|
+| Q7 tanpa index | Seq Scan + Sort | 92,366 ms | 93,084 ms | 58.572 |
+| Q8 `(terjadi_pada, customer_id)` | Index Scan Backward | **9,847 ms** | 10,408 ms | **3.825** |
+
+**Penafsiran.** Index dipakai dan urutannya dipinjam: karena daun B-Tree sudah urut menurut
+`terjadi_pada`, membacanya mundur langsung memberi urutan `DESC` yang diminta, sehingga Sort
+tidak diperlukan. Tetapi `customer_id` berada di kolom kedua, jadi PostgreSQL tetap harus
+menyusuri seluruh rentang waktu sejak Juni sambil membuang baris yang customer-nya salah —
+3.825 buffer, sekitar 15 kali lebih sedikit daripada baseline tetapi masih 200 kali lebih
+banyak daripada Q9. Index yang "dipakai" belum tentu index yang tepat.
 
 **Q9 · Urutan benar.** Berkas: `q09_urutan_benar.sql`. Bandingkan tiga waktu dalam satu tabel.
 
@@ -284,43 +328,217 @@ apakah masih ada node `Sort`?
 | Q8 `(terjadi_pada, customer_id)` | | | | |
 | Q9 `(customer_id, terjadi_pada DESC)` | | | | |
 
-**Q10 · Ukuran index.** Berkas: `q10_ukuran_index.sql`. Cantumkan ukuran kedua index, lalu
-jelaskan dengan angka dari tiga percobaan di berkas itu (fillfactor, deduplikasi, dan
-pembangunan bertahap) mengapa kolom yang sama dapat menghasilkan ukuran berbeda.
+**Q10 · Ukuran index.** Berkas: `q10_ukuran_index.sql`
+(keluaran: `explain/q10_ukuran_index.txt`).
 
-> «Belum diisi.»
+| Index | Ukuran | Byte | Halaman daun | Kerapatan daun |
+|---|---:|---:|---:|---:|
+| `ev_salah_idx (terjadi_pada, customer_id)` | 60 MB | 63.012.864 | 7.663 | 89,94% |
+| `ev_benar_idx (customer_id, terjadi_pada DESC)` | 60 MB | 63.102.976 | 7.663 | 90,03% |
+
+Keduanya **praktis sama besar**, hanya berbeda 90.112 byte atau 0,14%. Itu masuk akal: jumlah
+entri sama, lebar kuncinya sama (4 byte integer + 8 byte timestamp), jumlah halaman daunnya
+bahkan identik 7.663, dan keduanya dibangun sekaligus oleh `CREATE INDEX` yang mengurutkan
+data lebih dulu sehingga daunnya terisi ~90%.
+
+Karena perbandingan itu sendiri tidak menjelaskan apa pun, berkas ini memuat tiga percobaan
+terkendali yang menunjukkan kapan kolom yang sama benar-benar menghasilkan ukuran berbeda:
+
+| Penyebab | Varian | Ukuran |
+|---|---|---:|
+| **Fillfactor** | `(customer_id, terjadi_pada DESC)` fillfactor 90 (bawaan) | 60 MB |
+| | kolom sama, fillfactor 50 | **109 MB** |
+| **Deduplikasi daun** | `(status)` — hanya 3 nilai, berulang jutaan kali | 13 MB |
+| | `(status, event_id)` — setiap kunci unik | **63 MB** |
+| **Cara dibangun** | diisi bertahap lewat INSERT acak | 19 MB, kerapatan 72,1% |
+| | dibangun sekaligus oleh `CREATE INDEX` | **15 MB**, kerapatan 90,0% |
+
+**Penafsiran.** Ukuran B-Tree ditentukan tiga hal di luar daftar kolomnya. Pertama,
+`fillfactor`: ruang kosong yang sengaja disisakan tiap halaman daun — menurunkannya dari 90 ke
+50 membuat index 82% lebih besar tanpa menambah satu entri pun. Kedua, **deduplikasi**: sejak
+PostgreSQL 13, kunci yang berulang disimpan sekali dengan daftar penunjuk, sehingga index atas
+`status` yang hanya punya tiga nilai cukup 13 MB; menambahkan `event_id` membuat setiap kunci
+unik, deduplikasi mati, dan ukurannya melonjak hampir lima kali. Ketiga, **cara pengisian**:
+index yang sudah ada lalu diisi INSERT acak mengalami pemecahan halaman sehingga daunnya hanya
+terisi 72,1%, sedangkan yang dibangun sekaligus terisi 90,0% — selisih 4 MB untuk isi yang
+sama persis.
 
 **Q11 · Reflektif.** *Kaitkan urutan daun B-Tree dengan kemampuan optimizer berhenti
 mengurutkan hasil.*
 
-> «Belum diisi.»
+Daun B-Tree tersimpan berurutan menurut kolom kuncinya, dari kiri ke kanan. Karena itu, scan
+atas daun menghasilkan baris yang **sudah terurut** tanpa pekerjaan tambahan, dan bila urutan
+itu cocok dengan `ORDER BY` query, optimizer boleh membuang node `Sort` sepenuhnya. Arah tidak
+menjadi penghalang: B-Tree dapat dibaca maju maupun mundur, dan Q8 membuktikannya — rencananya
+berbunyi `Index Scan Backward`, memberi urutan `terjadi_pada DESC` dari index yang didefinisikan
+menaik.
+
+Tiga rencana di latihan ini menunjukkan rangkaiannya dengan rapi:
+
+| Keadaan | Ada `Sort`? | Buffers | Tercepat |
+|---|---|---:|---:|
+| Q7 tanpa index | **ya**, quicksort 26 kB | 58.572 | 92,366 ms |
+| Q8 `(terjadi_pada, customer_id)` | tidak | 3.825 | 9,847 ms |
+| Q9 `(customer_id, terjadi_pada DESC)` | tidak | **18** | **0,020 ms** |
+
+Yang penting: **hilangnya `Sort` bukan penentu kemenangan.** Q8 dan Q9 sama-sama tanpa `Sort`,
+tetapi selisihnya masih 490 kali lipat. Urutan daun menghemat *pengurutan*; posisi kolom
+penyaring menentukan *berapa banyak daun yang harus dibaca* sebelum `LIMIT 20` terpenuhi. Pada
+Q9 kolom kesetaraan `customer_id` ada di depan, sehingga seluruh baris milik customer itu
+berkumpul di satu tempat dan sudah urut waktu di dalamnya — PostgreSQL cukup melompat ke sana
+dan membaca 19 baris pertama. Pada Q8 kolom waktu yang di depan, sehingga 19 baris itu
+tersebar di sepanjang separuh index.
+
+Satu syarat yang mudah terlupakan: `Sort` hanya bisa dibuang bila **arah seluruh kolom urut**
+cocok dengan definisi index, seluruhnya searah atau seluruhnya terbalik. `ORDER BY a ASC, b DESC`
+tidak dapat dilayani index `(a, b)` tanpa pengurutan ulang, karena tidak ada arah pembacaan
+yang menghasilkan pola campuran itu.
 
 ### Langkah 4 · Partial, expression, covering, dan index-only scan
 
-**Q12 · Partial index.** Berkas: `q12_partial_index.sql`. Cantumkan ukuran `ev_gagal_idx` dan
-index polos pada `terjadi_pada`, serta persentase penghematannya.
+**Q12 · Partial index.** Berkas: `q12_partial_index_gagal.sql`
+(keluaran: `explain/q12_partial_index_gagal.txt`).
 
-> «Belum diisi.»
+| Index | Definisi | Ukuran | Byte |
+|---|---|---:|---:|
+| `ev_terjadi_pada_idx` | `(terjadi_pada DESC)`, seluruh baris | 43 MB | 44.949.504 |
+| `ev_gagal_idx` | `(terjadi_pada DESC) WHERE status='GAGAL'` | **896 kB** | 917.504 |
 
-**Q13 · Expression index.** Berkas: `q13_expression_index.sql`. Index mana yang dipakai pada
-`email = ...` dan pada `lower(email) = ...`?
+**Penghematan: 97,96%**, dan baris berstatus `GAGAL` memang 2,00% dari tabel.
 
-> «Belum diisi.»
+Index itu benar-benar dipakai, bukan sekadar kecil:
 
-**Q14 · Index-only scan dan Heap Fetches.** Berkas: `q14_covering_index.sql`. Cantumkan Heap
-Fetches sebelum dan sesudah `VACUUM (ANALYZE)`, beserta `relallvisible`.
+```text
+ Limit  (cost=0.29..1.38 rows=20 width=16) (actual time=0.010..0.012 rows=20 loops=1)
+   Buffers: shared hit=22
+   ->  Index Scan using ev_gagal_idx on event_log
+ Execution Time: 0.012 ms
+```
 
-> «Belum diisi.»
+**Penafsiran.** Penghematan 97,96% mengikuti fraksi barisnya hampir sempurna: index parsial
+hanya menyimpan entri untuk baris yang lolos predikat, jadi ukurannya sebanding dengan 2%
+tabel ditambah sedikit ongkos struktur. Harganya adalah kekhususan — index ini tidak dapat
+melayani query yang menyaring `status='TERTUNDA'` atau yang tidak menyebut `status` sama
+sekali. Untuk beban kerja "cari kegagalan terbaru", itu tukar yang sangat murah: 896 kB
+melayani query yang pada Q22 ternyata 2,4 kali lebih cepat daripada Seq Scan.
 
-**Q15 · INCLUDE lawan tiga kolom.** Berkas: `q15_include_vs_tiga_kolom.sql`. Bandingkan ukuran
-dan rencana eksekusinya.
+**Q13 · Expression index.** Berkas: `q13_expression_index_email.sql`
+(keluaran: `explain/q13_expression_index_email.txt`). `ev_email_lower_idx` berukuran **86 MB**.
 
-> «Belum diisi.»
+| Query | Node | Index dipakai | Tercepat | Median | Buffers |
+|---|---|---|---:|---:|---:|
+| `WHERE email = '...'` | Seq Scan | **tidak** | 107,902 ms | 108,698 ms | 58.569 |
+| `WHERE lower(email) = lower('...')` | Index Scan `ev_email_lower_idx` | **ya** | **0,012 ms** | 0,014 ms | **4** |
+| `WHERE upper(email) = upper('...')` | Seq Scan | **tidak** | 350,281 ms | — | 58.569 |
+
+**Jawaban.** Index yang dipakai hanya pada versi kedua, dan satu-satunya alasannya: predikat
+query harus **cocok persis dengan ekspresi yang dipakai saat index dibuat**. Index ini
+dibangun atas `lower(email)`, maka PostgreSQL mengenalinya pada `lower(email) = ...`, tetapi
+tidak pada `email = ...` maupun `upper(email) = ...` — bagi optimizer ketiganya adalah
+ekspresi yang berbeda, dan tidak ada aturan yang membolehkannya menyimpulkan bahwa `email`
+dapat dicari lewat index atas `lower(email)`.
+
+Selisihnya ekstrem: 4 buffer lawan 58.569, dan 0,012 ms lawan 107,902 ms — sekitar 9.000 kali
+lebih cepat. Pelajaran praktisnya, index ekspresi hanya berguna bila seluruh kode aplikasi
+menulis predikatnya dengan bentuk yang sama; satu query yang lupa membungkus dengan `lower()`
+akan diam-diam kembali memindai seluruh tabel.
+
+**Q14 · Index-only scan dan Heap Fetches.** Berkas: `q14_covering_index_only_scan.sql`
+(keluaran: `explain/q14_covering_index_only_scan.txt`). `ev_cover_idx` berukuran **77 MB**.
+
+| Tahap | `relallvisible` | `relpages` | Persen all-visible |
+|---|---:|---:|---:|
+| Sebelum UPDATE | 7.822 | 58.569 | 13,36% |
+| Sesudah UPDATE baris customer 4211 | 7.822 | 58.569 | 13,36% |
+| **Sesudah `VACUUM (ANALYZE)`** | **58.537** | 58.570 | **99,94%** |
+
+| Keadaan | Node | Heap Fetches | Buffers | Tercepat |
+|---|---|---:|---:|---:|
+| Sebelum VACUUM, rencana apa adanya | Index Only Scan | **66 / 33 / 33** | 40 | 0,015 ms |
+| Sebelum VACUUM, index-only dipaksa | Index Only Scan | **33 / 33 / 33** | 6 | 0,009 ms |
+| **Sesudah `VACUUM (ANALYZE)`** | Index Only Scan | **0 / 0 / 0** | **5** | 0,013 ms |
+
+**Penafsiran.** Sebelum VACUUM, index-only scan tetap dipilih tetapi tidak benar-benar
+"only": ia masih harus menengok heap 33 kali, satu kali untuk tiap baris yang dikembalikan,
+karena halaman yang memuat baris-baris itu belum ditandai all-visible. Angka 66 pada
+pengulangan pertama adalah dua kali 33, akibat versi baris lama yang masih tertinggal dari
+`UPDATE` dan baru dibersihkan oleh pemangkasan halaman saat kunjungan pertama; dua pengulangan
+berikutnya sudah mantap di 33. Setelah `VACUUM (ANALYZE)` menandai 99,94% halaman sebagai
+all-visible, Heap Fetches turun ke **nol** dan jumlah buffer dari 40 menjadi 5.
+
+**Q15 · INCLUDE lawan tiga kolom.** Berkas: `q15_covering_vs_tigakolom.sql`
+(keluaran: `explain/q15_covering_vs_tigakolom.txt`).
+
+| Index | Ukuran | Byte |
+|---|---:|---:|
+| `ev_cover_idx (customer_id) INCLUDE (terjadi_pada, jumlah)` | 77 MB | 81.141.760 |
+| `ev_cover3_idx (customer_id, terjadi_pada, jumlah)` | 77 MB | 81.133.568 |
+
+**Ukurannya praktis identik** — beda 8.192 byte, satu halaman. Wajar, karena isi yang disimpan
+sama: ketiga kolom ada di dalam daun pada kedua bentuk. Pembedanya bukan ruang, melainkan apa
+yang boleh dilakukan optimizer dengan kolom kedua dan ketiga.
+
+| Kebutuhan query | `INCLUDE` | Tiga kolom kunci |
+|---|---|---|
+| `WHERE customer_id = 4211` | Index Only Scan | Index Only Scan |
+| `ORDER BY terjadi_pada LIMIT 5` | **perlu `Sort`** (top-N heapsort, cost 9,60) | **tanpa `Sort`** (cost 1,69) |
+| `AND terjadi_pada >= ...` | `Index Cond` hanya `customer_id` | `Index Cond` memuat **kedua** kolom |
+
+```text
+-- INCLUDE, ORDER BY kolom kedua
+ Limit  (cost=9.59..9.60 rows=5 width=14)
+   ->  Sort  (cost=9.59..9.67 rows=34 width=14)
+         Sort Key: terjadi_pada
+         Sort Method: top-N heapsort  Memory: 25kB
+
+-- Tiga kolom kunci, query sama persis
+ Limit  (cost=0.43..1.69 rows=5 width=14)
+   ->  Index Only Scan using ev_cover3_idx on event_log
+         Index Cond: (customer_id = 4211)
+```
+
+**Penafsiran.** Kolom `INCLUDE` hanya ikut **disimpan** di daun agar dapat dikembalikan tanpa
+menyentuh heap; ia tidak ikut menentukan urutan daun dan tidak dapat dipakai sebagai
+`Index Cond`. Karena itu `ORDER BY terjadi_pada` memaksa node `Sort` tambahan, dan predikat
+atas `terjadi_pada` baru diterapkan setelah seluruh 33 entri milik customer itu dibaca.
+Dengan tiga kolom kunci, keduanya diselesaikan di dalam index: urutan sudah benar sejak awal
+(estimasi biaya turun dari 9,60 ke 1,69) dan rentang waktu masuk ke `Index Cond`.
+
+Lalu kapan `INCLUDE` tetap lebih baik? Ketika kolom tambahan **tidak pernah** dipakai untuk
+mencari atau mengurutkan, dan terutama ketika index harus `UNIQUE`: keunikan hanya berlaku
+pada kolom kunci, sehingga `UNIQUE (customer_id) INCLUDE (jumlah)` menjaga keunikan
+`customer_id` sambil tetap mencakup `jumlah` — sesuatu yang tidak bisa dilakukan index tiga
+kolom kunci.
 
 **Q16 · Reflektif.** *Mengapa Heap Fetches berubah setelah VACUUM walau definisi index tidak
 berubah?*
 
-> «Belum diisi.»
+Karena yang berubah bukan index, melainkan **visibility map** — peta satu-dua bit per halaman
+heap yang mencatat apakah seluruh baris di halaman itu pasti terlihat oleh semua transaksi.
+
+Index B-Tree tidak menyimpan informasi visibilitas sama sekali; ia hanya memetakan kunci ke
+lokasi baris. Jadi ketika index-only scan menemukan entri yang cocok, PostgreSQL masih harus
+menjawab satu pertanyaan yang tidak dapat dijawab index: apakah versi baris itu benar-benar
+terlihat oleh transaksi ini, atau sudah mati karena UPDATE atau DELETE. Satu-satunya jalan
+pintas adalah visibility map: bila halamannya bertanda all-visible, pertanyaan itu dijawab
+"ya" tanpa membaca heap. Bila tidak bertanda, PostgreSQL wajib menengok heap — dan setiap
+kunjungan itulah yang dihitung sebagai **Heap Fetches**.
+
+`VACUUM` adalah satu-satunya proses yang memasang tanda tersebut. Itu sebabnya angkanya
+berubah drastis meski `CREATE INDEX` tidak pernah diulang:
+
+| | Sebelum VACUUM | Sesudah VACUUM |
+|---|---:|---:|
+| Halaman all-visible | 7.822 dari 58.569 (13,36%) | **58.537 dari 58.570 (99,94%)** |
+| Heap Fetches | 33 | **0** |
+| Buffers | 40 | **5** |
+
+Tiga akibat praktisnya. Pertama, index-only scan tidak bisa diandalkan pada tabel yang baru
+saja banyak di-UPDATE atau di-DELETE; ia akan diam-diam berubah menjadi index scan biasa
+dengan kunjungan heap. Kedua, `UPDATE` yang bukan HOT ikut merusak tanda all-visible halaman
+yang disentuhnya — sehingga Q6 dan Q14 sebenarnya satu cerita yang sama dilihat dari dua sisi.
+Ketiga, autovacuum yang tertinggal pada tabel yang ramai ditulis akan menampakkan diri sebagai
+"query yang tiba-tiba melambat" tanpa satu pun perubahan pada skema maupun index.
 
 ### Langkah 5 · GIN dan BRIN
 
@@ -716,22 +934,22 @@ satunya dibiarkan polos, satunya diberi lima index yang mewakili kelima jenis ya
 latihan ini: B-Tree majemuk `(customer_id, terjadi_pada DESC)`, partial `WHERE status='GAGAL'`,
 ekspresi `lower(email)`, GIN `jsonb_path_ops` pada `payload`, dan BRIN pada `terjadi_pada`.
 Setiap ulangan menyisipkan 200.000 baris yang sama ke kedua tabel, dan antar ulangan tabelnya
-di-`TRUNCATE` (bukan `DELETE`) supaya ruangnya kembali dan ukuran pada Q28 tetap adil.
+di-`TRUNCATE` supaya ruangnya kembali dan ukuran pada Q28 tetap adil.
 
 | Ulangan | Tanpa index | Dengan 5 index | Selisih | Lebih lambat |
 |---|---:|---:|---:|---:|
-| 1 | 143,4 ms | 987,5 ms | 844,1 ms | **588,6%** |
-| 2 | 148,0 ms | 942,0 ms | 794,0 ms | **536,5%** |
-| 3 | 126,0 ms | 998,7 ms | 872,7 ms | **692,6%** |
-| **Tercepat** | **126,0 ms** | **942,0 ms** | 816,0 ms | 647,6% |
-| **Median** | **143,4 ms** | **987,5 ms** | 844,1 ms | 588,6% |
+| 1 | 147,8 ms | 993,8 ms | 846,0 ms | **572,4%** |
+| 2 | 153,4 ms | 938,6 ms | 785,2 ms | **511,9%** |
+| 3 | 124,5 ms | 908,4 ms | 783,9 ms | **629,6%** |
+| **Tercepat** | **124,5 ms** | **908,4 ms** | 783,9 ms | 629,6% |
+| **Median** | **147,8 ms** | **938,6 ms** | 790,8 ms | **535,0%** |
 
-**Penafsiran.** Memakai median, INSERT dengan lima index **588,6% lebih lambat**, atau hampir
-tujuh kali lipat waktu INSERT polos (987,5 / 143,4 = 6,9×). Angka ini bukan biaya satu index
-melainkan jumlah lima index: setiap baris baru memaksa lima struktur ikut diperbarui, dan GIN
-yang harus memecah `payload` menjadi entri-entri jalur adalah yang paling mahal. Sebaran
-ketiga ulangan cukup lebar (536,5% sampai 692,6%) karena INSERT bersaing dengan autovacuum dan
-penulisan WAL, sehingga median lebih layak dipakai daripada satu angka tunggal.
+**Penafsiran.** Memakai median, INSERT dengan lima index **535,0% lebih lambat**, yaitu 6,35
+kali waktu INSERT polos. Angka ini bukan biaya satu index melainkan jumlah lima index: setiap
+baris baru memaksa lima struktur ikut diperbarui, dan GIN yang harus memecah `payload` menjadi
+entri jalur adalah yang paling mahal. Sebaran ketiga ulangan lebar (511,9% sampai 629,6%)
+karena INSERT bersaing dengan autovacuum dan penulisan WAL, sehingga median lebih layak
+dipakai daripada satu angka tunggal.
 
 **Q28 · Ukuran dua keadaan.** Berkas: `q28_ukuran_dua_keadaan.sql`
 (keluaran: `explain/q28_ukuran_dua_keadaan.txt`).
@@ -739,196 +957,230 @@ penulisan WAL, sehingga median lebih layak dipakai daripada satu angka tunggal.
 | Tabel | Heap | Index | Total |
 |---|---:|---:|---:|
 | `tulis_tanpa_index` | 45 MB | 0 byte | **45 MB** (47.702.016 byte) |
-| `tulis_lima_index` | 45 MB | 27 MB | **72 MB** (75.620.352 byte) |
-| Selisih | sama | +27 MB | **+58,5%** |
+| `tulis_lima_index` | 45 MB | 27 MB | **72 MB** (75.636.736 byte) |
+| Selisih | sama | +27 MB | **+58,6%** |
 
 Rincian kelima index pada `tulis_lima_index`:
 
 | Index | Jenis | Ukuran |
 |---|---|---:|
 | `tulis_ekspresi_idx` | B-Tree `lower(email)` | 14 MB |
-| `tulis_btree_idx` | B-Tree `(customer_id, terjadi_pada DESC)` | 8.312 kB |
-| `tulis_gin_idx` | GIN `payload jsonb_path_ops` | 4.808 kB |
+| `tulis_btree_idx` | B-Tree `(customer_id, terjadi_pada DESC)` | 8.344 kB |
+| `tulis_gin_idx` | GIN `payload jsonb_path_ops` | 4.792 kB |
 | `tulis_partial_idx` | B-Tree partial `status='GAGAL'` | 176 kB |
-| `tulis_brin_idx` | BRIN `terjadi_pada` | 24 kB |
+| `tulis_brin_idx` | BRIN `terjadi_pada` | **24 kB** |
 
 **Penafsiran.** Heap kedua tabel sama persis 45 MB, jadi seluruh selisih 27 MB murni biaya
 index. Perhatikan sebarannya: `tulis_ekspresi_idx` sendirian 14 MB, lebih dari separuh total,
-karena `lower(email)` menyimpan salinan string email untuk setiap baris. Di ujung lain,
-BRIN hanya 24 kB — 583 kali lebih kecil daripada index ekspresi untuk tabel yang sama. Jadi
-"menambah index" bukan satu harga: tergantung jenis dan kolomnya, biayanya bisa berbeda tiga
-orde besaran.
+karena `lower(email)` menyimpan salinan string email untuk setiap baris. Di ujung lain, BRIN
+hanya 24 kB — **583 kali lebih kecil** daripada index ekspresi untuk tabel yang sama. Jadi
+"menambah index" bukan satu harga: tergantung jenis dan kolomnya, biayanya berbeda tiga orde
+besaran.
 
 **Q29 · Daftar index dan `idx_scan`.** Berkas: `q29_daftar_index.sql`
-(keluaran: `explain/q29_daftar_index.txt`). Seluruh skema `lab6` memuat **17 index, 461 MB**,
-dan **8 di antaranya (88 MB) belum pernah dipakai sama sekali**.
+(keluaran: `explain/q29_daftar_index.txt`). Seluruh skema `lab6` memuat **20 index, 466 MB**,
+dan **8 di antaranya (71 MB) belum pernah dipakai sama sekali**.
 
 | Tabel | Index | `idx_scan` | `idx_tup_read` | Ukuran |
 |---|---|---:|---:|---:|
-| `event_log` | `event_log_pkey` | 6 | 1.200.000 | 43 MB |
-| `event_log` | `ev_email_lower_idx` | 1 | 1 | 86 MB |
-| `event_log` | `ev_cover3_idx` | 1 | 40 | 77 MB |
-| `event_log` | `ev_benar_idx` | 1 | 20 | 60 MB |
-| `event_log` | `idx_btree_terjadi` | 1 | 46.523 | 43 MB |
-| `event_log` | `ev_terjadi_pada_idx` | 1 | 46.523 | 43 MB |
-| `event_log` | `idx_status` | 1 | 2.000.000 | 13 MB |
-| `event_log` | `idx_gin_payload` | 1 | 80.000 | 7.096 kB |
-| `event_log` | `ev_gagal_idx` | 1 | 40.000 | 896 kB |
-| `event_log` | `ev_salah_idx` | **0** | 0 | 60 MB |
+| `event_log` | `ev_benar_idx` | **18** | 8.550.606 | 60 MB |
+| `event_log` | `event_log_pkey` | 9 | 2.200.005 | 43 MB |
+| `event_log` | `idx_gin_tags` | 8 | 2.666.668 | 4.664 kB |
+| `event_log` | `ev_cover3_idx` | 6 | 32 | 77 MB |
+| `event_log` | `ev_gagal_idx` | 6 | 120.062 | 896 kB |
+| `event_log` | `idx_status` | 5 | 4.520.000 | 13 MB |
+| `event_log` | `idx_btree_terjadi` | 4 | 186.092 | 43 MB |
+| `event_log` | `idx_gin_payload` | 4 | 320.000 | 7.096 kB |
+| `event_log` | `ev_email_lower_idx` | 3 | 3 | 86 MB |
+| `event_log` | `idx_brin_terjadi` | 3 | 44.460 | **32 kB** |
+| `hot_longgar` | `hot_longgar_pkey` | 2 | 18.976 | 456 kB |
+| `event_log` | `ev_salah_idx` | 1 | 66 | 60 MB |
+| `event_log` | `ev_terjadi_pada_idx` | **0** | 0 | 43 MB |
 | `tulis_lima_index` | `tulis_ekspresi_idx` | **0** | 0 | 14 MB |
-| `tulis_lima_index` | `tulis_btree_idx` | **0** | 0 | 8.312 kB |
-| `tulis_lima_index` | `tulis_gin_idx` | **0** | 0 | 4.808 kB |
-| `hot_longgar` | `hot_longgar_pkey` | **0** | 0 | 456 kB |
+| `tulis_lima_index` | `tulis_btree_idx` | **0** | 0 | 8.344 kB |
+| `tulis_lima_index` | `tulis_gin_idx` | **0** | 0 | 4.792 kB |
+| `hot_longgar` | `hot_longgar_nama_idx` | **0** | 0 | 872 kB |
 | `hot_penuh` | `hot_penuh_pkey` | **0** | 0 | 456 kB |
 | `tulis_lima_index` | `tulis_partial_idx` | **0** | 0 | 176 kB |
 | `tulis_lima_index` | `tulis_brin_idx` | **0** | 0 | 24 kB |
 
-**Index dengan `idx_scan` nol dan alasannya.**
+**Index dengan `idx_scan` nol dan alasannya.** Kedelapan index itu terbagi tiga golongan, dan
+hanya satu golongan yang benar-benar layak dihapus:
 
-- **`hot_longgar_pkey` dan `hot_penuh_pkey` (456 kB masing-masing) wajib dipertahankan** meski
-  tidak pernah dipakai membaca, karena keduanya **primary key**: tugasnya menjaga keunikan
-  `id`, bukan mempercepat query. Menghapusnya mengubah aturan integritas tabel, bukan sekadar
-  mengurangi ruang.
-- **Lima index pada `tulis_lima_index` (27 MB) memang tidak pernah dibaca**, dan itu persis
-  maksud percobaan Q27: tabel itu hanya ditulis. Kelimanya dihapus bersama tabel uji setelah
-  latihan selesai.
-- **`ev_salah_idx` (60 MB) adalah satu-satunya index "nol" pada tabel sungguhan.** Ia dibuat di
-  Q8 untuk membuktikan bahwa urutan kolom yang keliru membuat index nyaris tak berguna, lalu
-  tidak pernah terpilih lagi begitu `ev_benar_idx` ada. Inilah kandidat hapus paling jelas.
+- **Wajib dipertahankan meski nol: `hot_penuh_pkey` (456 kB).** Ia primary key; tugasnya
+  menjaga keunikan `id`, bukan mempercepat baca. Menghapusnya mengubah aturan integritas
+  tabel, bukan sekadar menghemat ruang. Catatan menarik: `hot_longgar_pkey` yang definisinya
+  sama justru terpakai 2 kali, hanya karena Q6 menyaring `WHERE id <= 5000` di tabel itu —
+  bukti bahwa `idx_scan` mencerminkan beban kerja yang kebetulan dijalankan, bukan nilai
+  sebuah index.
+- **Hilang bersama tabel ujinya: lima index `tulis_*` (27 MB) dan `hot_longgar_nama_idx`
+  (872 kB).** Tabel `tulis_lima_index` memang hanya ditulis, tidak pernah dibaca — itu justru
+  inti percobaan Q27. `hot_longgar_nama_idx` sengaja dibuat untuk membuktikan Q6 bahwa UPDATE
+  kolom terindeks tidak menghasilkan HOT update; ia tidak pernah perlu dibaca untuk itu.
+- **Kandidat hapus sesungguhnya: `ev_terjadi_pada_idx` (43 MB).** Ini satu-satunya index pada
+  tabel sungguhan yang nol pemakaian, dan sebabnya jelas pada Q30: ia kembar dengan
+  `idx_btree_terjadi` yang isinya sama persis dan terpakai 4 kali. Dua index untuk satu kolom,
+  hanya berbeda arah urutan.
 
-**Catatan membaca `idx_tup_read`.** Angka `idx_scan` yang sama-sama 1 menyembunyikan perbedaan
-besar: `ev_email_lower_idx` membaca **1 baris** dalam satu kali pakai, sedangkan `idx_status`
-membaca **2.000.000 baris**. Jadi `idx_scan` hanya menghitung berapa kali index dibuka, bukan
-seberapa berguna ia. Sebagian besar index di sini baru dipakai sekali karena setiap soal
-memang hanya menjalankan query ujinya sekali atau tiga kali, bukan karena beban kerja nyata.
+**Catatan membaca `idx_tup_read`.** Angka `idx_scan` yang berdekatan menyembunyikan perbedaan
+besar: `ev_email_lower_idx` dibuka 3 kali dan hanya membaca **3 baris**, sedangkan `idx_status`
+dibuka 5 kali dan membaca **4.520.000 baris**. Jadi `idx_scan` hanya menghitung berapa kali
+index dibuka, bukan seberapa berguna ia; `idx_tup_read` dibaca bersamanya untuk melihat berapa
+banyak pekerjaan yang benar-benar dipikul.
 
 **Q30 · Rekomendasi final.** Berkas: `q30_rekomendasi_index.sql`
 (keluaran: `explain/q30_rekomendasi_index.txt`).
 
-Seluruh index pada `event_log` memakan **434 MB, yaitu 94,7% dari heap-nya sendiri (458 MB)**,
-sehingga satu tabel dua juta baris menghabiskan **891 MB**. Angka inilah yang membuat
+Seluruh index pada `event_log` memakan **438 MB, yaitu 95,8% dari heap-nya sendiri** (458 MB),
+sehingga satu tabel dua juta baris menghabiskan **896 MB**. Angka inilah yang membuat
 pemangkasan layak dibahas.
 
 | Index | `idx_scan` | Ukuran | % heap | Keputusan |
 |---|---:|---:|---:|---|
-| `event_log_pkey` | 6 | 43 MB | 9,37 | **dipertahankan** — primary key, menjaga keunikan |
-| `ev_gagal_idx` | 1 | 896 kB | 0,19 | **dipertahankan** — termurah, melayani `status='GAGAL'` |
-| `idx_gin_payload` | 1 | 7.096 kB | 1,51 | **dipertahankan** — satu-satunya jalan untuk `payload @>` |
-| `ev_cover3_idx` | 1 | 77 MB | 16,91 | **dipertahankan** sebagai gabungan |
-| `ev_benar_idx` | 1 | 60 MB | 13,15 | **digabung** ke `ev_cover3_idx` |
-| `ev_terjadi_pada_idx` | 1 | 43 MB | 9,37 | **digabung** dengan `idx_btree_terjadi` |
-| `idx_btree_terjadi` | 1 | 43 MB | 9,37 | **dipertahankan** (salah satu saja) |
-| `idx_status` | 1 | 13 MB | 2,90 | **ditinjau ulang** — 84% baris bernilai `SUKSES` |
-| `ev_salah_idx` | 0 | 60 MB | 13,13 | **dihapus** — tidak pernah dipakai |
-| `ev_email_lower_idx` | 1 | 86 MB | 18,84 | **dihapus** kecuali ada pencarian email |
+| `event_log_pkey` | 9 | 43 MB | 9,37 | **dipertahankan** — primary key |
+| `ev_cover3_idx` | 6 | 77 MB | 16,91 | **dipertahankan** sebagai gabungan |
+| `ev_gagal_idx` | 6 | 896 kB | 0,19 | **dipertahankan** — termurah, 97,96% lebih kecil dari index polos |
+| `idx_gin_tags` | 8 | 4.664 kB | 1,00 | **dipertahankan** — satu-satunya jalan untuk `tags @>` |
+| `idx_gin_payload` | 4 | 7.096 kB | 1,51 | **dipertahankan** — satu-satunya jalan untuk `payload @>` |
+| `idx_brin_terjadi` | 3 | **32 kB** | 0,01 | **dipertahankan** — hampir gratis |
+| `idx_status` | 5 | 13 MB | 2,90 | **ditinjau ulang** — 84% baris bernilai `SUKSES` |
+| `ev_benar_idx` | 18 | 60 MB | 13,15 | **digabung** ke `ev_cover3_idx` |
+| `idx_btree_terjadi` | 4 | 43 MB | 9,37 | **ditinjau ulang** — BRIN hampir seimbang |
+| `ev_salah_idx` | 1 | 60 MB | 13,13 | **dihapus** |
+| `ev_terjadi_pada_idx` | **0** | 43 MB | 9,37 | **dihapus** — kembar dengan `idx_btree_terjadi` |
+| `ev_email_lower_idx` | 3 | 86 MB | 18,84 | **dihapus** kecuali ada pencarian email |
 
-**Tiga kandidat gabung yang ditemukan query di `q30`.**
+**Kandidat gabung yang ditemukan query di `q30`.**
 
 1. `ev_benar_idx (customer_id, terjadi_pada DESC)` adalah **awalan** dari
-   `ev_cover3_idx (customer_id, terjadi_pada, jumlah)`. Satu index yang lebih lebar sudah
-   melayani seluruh query yang dilayani yang sempit, jadi menyimpan keduanya membuang **60 MB**.
+   `ev_cover3_idx (customer_id, terjadi_pada, jumlah)`. Ini kasus paling menarik: yang sempit
+   justru terpakai **18 kali**, terbanyak di seluruh skema, sementara yang lebar 6 kali.
+   Artinya yang dihapus bukan yang jarang dipakai, melainkan yang **pekerjaannya sudah bisa
+   diambil alih**: `ev_cover3_idx` melayani setiap query yang dilayani `ev_benar_idx`, dengan
+   urutan kolom yang sama. Hemat **60 MB**.
 2. `ev_terjadi_pada_idx (terjadi_pada DESC)` dan `idx_btree_terjadi (terjadi_pada)` adalah
-   **index kembar** yang hanya berbeda arah urutan, masing-masing 43 MB dan keduanya membaca
-   46.523 baris yang sama. B-Tree dapat dibaca maju maupun mundur, jadi salah satu cukup:
-   hemat **43 MB**. Keduanya lahir karena dibuat oleh dua berkas berbeda (Q12 dan Q19) —
-   contoh nyata bagaimana index kembar muncul di proyek yang dikerjakan beramai-ramai.
+   **index kembar** yang hanya berbeda arah urutan, masing-masing 43 MB. B-Tree dapat dibaca
+   maju maupun mundur, jadi salah satu cukup — dan kebetulan yang `DESC` justru tidak pernah
+   dipakai. Hemat **43 MB**. Keduanya lahir dari dua berkas berbeda (Q12 dan Q19), contoh
+   nyata bagaimana index kembar muncul di proyek yang dikerjakan beramai-ramai.
 3. `ev_salah_idx (terjadi_pada, customer_id)` memuat `terjadi_pada` di depan, sehingga query
-   rentang waktu sudah terlayani index waktu yang 43 MB. Ia 60 MB dan `idx_scan`-nya nol.
+   rentang waktu sudah terlayani index waktu yang 43 MB. Ia 60 MB dengan `idx_scan` 1.
 
-**Ringkasan penghematan.** Menghapus `ev_salah_idx` (60 MB), `ev_benar_idx` (60 MB), satu dari
-dua index waktu kembar (43 MB), dan `ev_email_lower_idx` (86 MB) memangkas **249 MB dari
-434 MB**. Jejak index turun menjadi sekitar 185 MB, yaitu **40% dari heap, bukan 94,7%**, dan
-setiap INSERT ikut lebih ringan karena hanya enam struktur yang diperbarui, bukan sepuluh.
-
-**Catatan jujur tentang BRIN.** Pada basis data yang dipakai pengukuran ini **tidak ada index
-BRIN** pada `event_log`: berkas `q19_brin_correlation.sql` langsung mengukur
-`lab6.idx_brin_terjadi` tanpa pernah membuatnya, sehingga dua galat muncul saat seluruh
-rangkaian dijalankan ulang dari nol (`relation "lab6.idx_brin_terjadi" does not exist` dan
-`relation "idx_gin_payload" does not exist` karena nama tanpa skema). Angka BRIN pada Q19–Q20
-berasal dari sesi terpisah tempat index itu sempat dibuat manual. Sebelum pengumpulan, berkas
-itu perlu dilengkapi `CREATE INDEX ... USING brin (terjadi_pada) WITH (pages_per_range=128)`
-dan Q19–Q20 dijalankan ulang, supaya hasilnya dapat direproduksi dari berkas yang ada di
-repositori. Bila rekomendasi BRIN jadi diambil, dasarnya kuat: pada tabel uji Q28, BRIN hanya
-**24 kB** sementara index ekspresi 14 MB.
+**Ringkasan penghematan.** Menghapus `ev_terjadi_pada_idx` (43 MB), `ev_salah_idx` (60 MB),
+`ev_benar_idx` (60 MB), dan `ev_email_lower_idx` (86 MB) memangkas **249 MB dari 438 MB**.
+Jejak index turun menjadi sekitar 189 MB, yaitu **41% dari heap, bukan 95,8%**, dan setiap
+INSERT ikut lebih ringan karena hanya delapan struktur yang diperbarui, bukan dua belas.
+Bila `idx_btree_terjadi` juga diganti BRIN — Q20 menunjukkan selisihnya hanya 1,3 ms dengan
+**205 buffer lebih sedikit** — penghematannya menjadi 292 MB, dan jejak index tinggal 32% heap.
 
 **Q31 · Reflektif.** *Untuk setiap index yang direkomendasikan dihapus atau dipertahankan,
 sebutkan satu angka sebagai dasar keputusan.*
 
 | Index | Keputusan | Satu angka dasarnya |
 |---|---|---|
-| `event_log_pkey` | dipertahankan | `idx_scan` **6**, terbanyak di skema, dan satu-satunya penjaga keunikan `event_id` |
-| `ev_gagal_idx` | dipertahankan | **896 kB** = 0,19% heap, dan 97,96% lebih kecil daripada index polos pada kolom yang sama |
-| `idx_gin_payload` | dipertahankan | **1,51% heap** untuk melayani 80.000 baris `payload @> '{"promo": true}'` |
-| `ev_cover3_idx` | dipertahankan | menyerap pekerjaan `ev_benar_idx`, menghemat **60 MB** bila yang sempit dihapus |
-| `ev_benar_idx` | dihapus/digabung | **60 MB** untuk kolom kunci yang sudah jadi awalan index lain |
-| `ev_terjadi_pada_idx` | dihapus/digabung | **43 MB** kembar dengan `idx_btree_terjadi`, beda arah urutan saja |
-| `idx_status` | ditinjau ulang | **84%** baris bernilai `SUKSES`, dan pada fraksi itu optimizer tetap memilih Seq Scan |
-| `ev_salah_idx` | dihapus | `idx_scan` **0** untuk **60 MB** |
-| `ev_email_lower_idx` | dihapus | **86 MB** (18,84% heap) untuk 1 kali pakai yang membaca **1 baris** |
+| `event_log_pkey` | dipertahankan | `idx_scan` **9** dan satu-satunya penjaga keunikan `event_id` |
+| `ev_cover3_idx` | dipertahankan | menyerap pekerjaan `ev_benar_idx`, menghemat **60 MB** |
+| `ev_gagal_idx` | dipertahankan | **896 kB** = 0,19% heap, 97,96% lebih kecil daripada index polos sekolom |
+| `idx_gin_tags` | dipertahankan | **1,00% heap** melayani 500.000 baris `tags @>` yang 1,7 kali lebih cepat daripada Seq Scan |
+| `idx_gin_payload` | dipertahankan | **1,51% heap**, query `payload @>` 2,3 kali lebih cepat (141,8 ms lawan 325,6 ms) |
+| `idx_brin_terjadi` | dipertahankan | **32 kB**, 1.372 kali lebih kecil daripada B-Tree sekolom |
+| `idx_status` | ditinjau ulang | **84%** baris bernilai `SUKSES`; pada fraksi itu optimizer memilih Seq Scan |
+| `idx_btree_terjadi` | ditinjau ulang | **43 MB** untuk keunggulan 1,3 ms atas BRIN yang 32 kB |
+| `ev_benar_idx` | dihapus, digabung | **60 MB** untuk kolom kunci yang sudah jadi awalan index lain |
+| `ev_terjadi_pada_idx` | dihapus | `idx_scan` **0** untuk **43 MB**, kembar dengan index yang terpakai |
+| `ev_salah_idx` | dihapus | `idx_scan` **1** untuk **60 MB** |
+| `ev_email_lower_idx` | dihapus | **86 MB** (18,84% heap) untuk 3 kali pakai yang membaca **3 baris** |
 
 **Pola keputusannya.** Index dipertahankan bila manfaatnya terukur dan ruangnya kecil relatif
 heap, atau bila ia menjaga integritas — bukan karena "mungkin berguna nanti". Index dihapus
 bila `idx_scan` nol, bila kolom kuncinya sudah jadi awalan index lain, atau bila rasio
-ruang-terhadap-manfaatnya buruk seperti 86 MB untuk satu baris. Dua angka yang membingkai
-seluruh keputusan di atas: index `event_log` memakan **94,7% ruang heap**, dan INSERT dengan
-lima index **588,6% lebih lambat** daripada tanpa index. Index bukan hadiah gratis; ia dibayar
-dua kali, di ruang penyimpanan dan di setiap operasi tulis.
+ruang-terhadap-manfaatnya buruk seperti 86 MB untuk tiga baris terbaca. Yang paling perlu
+dicatat: **pemakaian tinggi bukan alasan otomatis mempertahankan.** `ev_benar_idx` adalah
+index tersibuk di skema ini dengan 18 pemakaian, tetapi tetap layak dihapus karena ada index
+lain yang mengerjakan hal yang sama. Dua angka yang membingkai seluruh keputusan di atas:
+index `event_log` memakan **95,8% ruang heap**, dan INSERT dengan lima index **535,0% lebih
+lambat** daripada tanpa index. Index bukan hadiah gratis; ia dibayar dua kali, di ruang
+penyimpanan dan di setiap operasi tulis.
 
 ---
 
 ## Tabel Perbandingan
 
-Angka diambil dari keluaran `explain/*.txt` masing-masing anggota. Setiap query dijalankan
-tiga kali; yang dilaporkan adalah tercepat dan median, bukan satu angka.
+Seluruh angka di bawah ini dihasilkan ulang dari `explain/*.txt` dengan
+`rangkum_pengukuran.py`, dari satu rangkaian Q0–Q30 yang dijalankan di satu mesin pada
+25 Oktober 2026. Setiap query dijalankan tiga kali; yang dilaporkan tercepat dan median.
 
-| Query / keadaan | Node | Tercepat | Median | Buffers | Ukuran index | Keputusan |
-|---|---|---:|---:|---|---:|---|
-| Q17 `payload @> promo` dengan GIN | Bitmap Heap Scan | 1.548,401 ms | — | hit=2 read=58.585 | 7.096 kB | GIN dipertahankan: tanpa GIN seluruh baris harus diuji operator `@>` |
-| Q18 `tags @> kanal:1` dengan GIN | Bitmap Heap Scan | 297,229 ms | 321,077 ms | hit=1 read=58.641 | 4.808 kB | GIN menang |
-| Q18 `tags @> kanal:1` tanpa GIN | Seq Scan | 531,721 ms | 582,267 ms | hit=16.344 read=42.222 | — | pembanding |
-| Q20 rentang 7 hari, BRIN | Bitmap Heap Scan | 11,276 ms | 13,864 ms | hit=1.417 read=1 | **32 kB** | BRIN: ruang 1.372× lebih kecil, waktu setara |
-| Q20 rentang 7 hari, B-Tree | Index Scan | 11,189 ms | 11,342 ms | hit=1.678 | 43 MB | menang tipis dalam waktu, kalah jauh dalam ruang |
-| Q22 `status='GAGAL'` (2%) | Index Scan | 108,216 ms | 138,654 ms | — | 896 kB | index dipakai |
-| Q22 `status='SUKSES'` (84%) | Seq Scan | 319,486 ms | 361,549 ms | — | 13 MB | index diabaikan optimizer |
-| Q24 `SUKSES`, `random_page_cost`=1.1 | Seq Scan | 341,589 ms | 498,867 ms | — | 13 MB | tetap Seq Scan |
-| Q27 INSERT 200.000 tanpa index | — | 126,0 ms | 143,4 ms | — | 0 byte | garis dasar tulis |
-| Q27 INSERT 200.000 dengan 5 index | — | 942,0 ms | 987,5 ms | — | 27 MB | **588,6% lebih lambat** |
-| Q28 ukuran tabel uji tulis | — | — | — | — | 45 MB lawan 72 MB | **+58,5%** ruang |
+| Query / keadaan | Node | Tercepat | Median | Buffers | Keputusan |
+|---|---|---:|---:|---:|---|
+| Q7 tanpa index | Seq Scan + Sort | 92,366 ms | 93,084 ms | 58.572 | garis dasar |
+| Q8 `(terjadi_pada, customer_id)` | Index Scan Backward | 9,847 ms | 10,408 ms | 3.825 | Sort hilang, pembacaan masih besar |
+| Q9 `(customer_id, terjadi_pada DESC)` | Index Scan | **0,020 ms** | 0,021 ms | **18** | urutan kolom yang benar |
+| Q12 `status='GAGAL'` lewat partial index | Index Scan `ev_gagal_idx` | 0,012 ms | 0,020 ms | 22 | 896 kB melayani 2% baris |
+| Q13 `email = ...` | Seq Scan | 107,902 ms | 108,698 ms | 58.569 | index ekspresi tidak cocok |
+| Q13 `lower(email) = ...` | Index Scan `ev_email_lower_idx` | **0,012 ms** | 0,014 ms | **4** | ekspresi cocok persis |
+| Q14 sebelum VACUUM (dipaksa index-only) | Index Only Scan | 0,009 ms | 0,013 ms | 6 | Heap Fetches 33 |
+| Q14 sesudah `VACUUM (ANALYZE)` | Index Only Scan | 0,013 ms | 0,014 ms | **5** | Heap Fetches **0** |
+| Q15 `INCLUDE` + `ORDER BY` kolom kedua | Sort + Index Only Scan | 0,017 ms | 0,020 ms | 8 | perlu Sort |
+| Q15 tiga kolom + `ORDER BY` kolom kedua | Index Only Scan | 0,010 ms | 0,015 ms | 4 | tanpa Sort |
+| Q17 `payload @> promo` dengan GIN | Bitmap Heap Scan | 141,800 ms | 143,347 ms | 58.588 | 2,3 kali lebih cepat |
+| Q17 tanpa GIN | Seq Scan | 325,603 ms | — | 58.570 | pembanding |
+| Q18 satu tag dengan GIN | Bitmap Heap Scan | 181,403 ms | 183,068 ms | 58.646 | 1,7 kali lebih cepat |
+| Q18 satu tag tanpa GIN | Seq Scan | 308,972 ms | 313,200 ms | 58.570 | pembanding |
+| Q18 dua tag dengan GIN | Bitmap Heap Scan | 164,708 ms | 166,411 ms | 58.818 | makin selektif makin unggul |
+| Q20 rentang 7 hari, BRIN | Bitmap Heap Scan | 5,066 ms | 5,466 ms | **1.491** | 32 kB |
+| Q20 rentang 7 hari, B-Tree | Index Scan `idx_btree_terjadi` | **4,003 ms** | 4,143 ms | 1.696 | 43 MB |
+| Q22 `status='GAGAL'` (2%) | Index Scan `ev_gagal_idx` | 64,226 ms | 67,643 ms | 40.098 | index dipakai |
+| Q22 `status='TERTUNDA'` (14%) | Bitmap Heap Scan | 120,183 ms | 131,808 ms | 58.812 | jalur tengah |
+| Q22 `status='SUKSES'` (84%) | Seq Scan | 157,416 ms | 160,374 ms | 58.570 | index diabaikan |
+| Q22 `SUKSES` dipaksa memakai index | Bitmap Heap Scan | 230,398 ms | — | 59.987 | 44% lebih lambat |
+| Q23 di bawah titik peralihan (34%) | Bitmap Heap Scan | 188,980 ms | 195,137 ms | 60.869 | index menang menurut optimizer |
+| Q23 di atas titik peralihan (50%) | Seq Scan | 142,639 ms | 143,020 ms | 58.570 | Seq Scan menang |
+| Q24 `SUKSES` dengan `random_page_cost`=1.1 | Seq Scan | 160,090 ms | 166,909 ms | 58.570 | tetap Seq Scan |
+| Q25 sebelum extended statistics | Seq Scan | 106,790 ms | 109,509 ms | 58.570 | estimasi 9.117 |
+| Q25 sesudah `ANALYZE` | Seq Scan | 106,704 ms | 106,941 ms | 58.570 | estimasi 44.730 |
+| Q27 INSERT 200.000 tanpa index | — | 124,5 ms | 147,8 ms | — | garis dasar tulis |
+| Q27 INSERT 200.000 dengan 5 index | — | 908,4 ms | 938,6 ms | — | **535,0% lebih lambat** |
 
-Baris untuk Q7–Q16 menyusul setelah jawaban Langkah 3 dan Langkah 4 dilengkapi; bukti
-`explain/`-nya sudah ada di repositori, tinggal angkanya disalin ke sini.
-
----
+Dua hal yang terbaca dari tabel ini sebagai satu kesatuan. Pertama, **kemenangan index tidak
+seragam**: pada Q9 dan Q13 selisihnya ribuan kali, pada Q17 dan Q18 hanya dua kali, dan pada
+Q22 `SUKSES` index justru kalah. Yang membedakan bukan jenis indexnya melainkan berapa banyak
+halaman heap yang tetap harus dibaca — pada Q17 dan Q18 baris yang cocok tersebar di hampir
+seluruh 58.570 halaman, sehingga index hanya menghemat biaya menguji operator, bukan biaya
+membaca. Kedua, **buffer lebih stabil daripada waktu** sebagai ukuran: Q20 memperlihatkan BRIN
+membaca 205 buffer lebih sedikit tetapi tetap sedikit lebih lambat, karena selisih 1,3 ms itu
+jatuh di wilayah derau mesin.
 
 ## Rekomendasi Akhir
 
-Dasar angkanya: seluruh index `event_log` memakan **434 MB atau 94,7% dari heap** (458 MB),
-dan INSERT 200.000 baris dengan lima index **588,6% lebih lambat** daripada tanpa index.
+Dasar angkanya: seluruh index `event_log` memakan **438 MB atau 95,8% dari heap** (458 MB),
+dan INSERT 200.000 baris dengan lima index **535,0% lebih lambat** daripada tanpa index.
 
 | Index | Keputusan | Angka dasar keputusan |
 |---|---|---|
-| `event_log_pkey` (43 MB) | dipertahankan | `idx_scan` 6, terbanyak di skema, sekaligus penjaga keunikan |
-| `ev_gagal_idx` (896 kB) | dipertahankan | 0,19% heap, 97,96% lebih kecil daripada index polos sekolom |
-| `idx_gin_payload` (7.096 kB) | dipertahankan | 1,51% heap untuk 80.000 baris `payload @>` |
-| `ev_cover3_idx` (77 MB) | dipertahankan sebagai gabungan | menyerap pekerjaan `ev_benar_idx`, hemat 60 MB |
+| `event_log_pkey` (43 MB) | dipertahankan | `idx_scan` 9, sekaligus penjaga keunikan |
+| `ev_cover3_idx` (77 MB) | dipertahankan sebagai gabungan | menyerap `ev_benar_idx`, hemat 60 MB |
+| `ev_gagal_idx` (896 kB) | dipertahankan | 0,19% heap, 97,96% lebih kecil dari index polos |
+| `idx_gin_tags` (4.664 kB) | dipertahankan | 1,00% heap untuk 500.000 baris `tags @>` |
+| `idx_gin_payload` (7.096 kB) | dipertahankan | 1,51% heap, query 2,3 kali lebih cepat |
+| `idx_brin_terjadi` (32 kB) | dipertahankan | 0,01% heap, 1.372 kali lebih kecil dari B-Tree sekolom |
+| `idx_status` (13 MB) | ditinjau ulang | 84% baris `SUKSES`, dan di fraksi itu optimizer memilih Seq Scan |
+| `idx_btree_terjadi` (43 MB) | ditinjau ulang | unggul 1,3 ms atas BRIN, tetapi 1.372 kali lebih besar |
 | `ev_benar_idx` (60 MB) | digabung ke `ev_cover3_idx` | kolom kuncinya awalan index yang lebih lebar |
-| `ev_terjadi_pada_idx` (43 MB) | digabung dengan `idx_btree_terjadi` | kembar, beda arah urutan saja; hemat 43 MB |
-| `idx_status` (13 MB) | ditinjau ulang | 84% baris `SUKSES`; pada fraksi itu optimizer memilih Seq Scan |
-| `ev_salah_idx` (60 MB) | dihapus | `idx_scan` 0 |
-| `ev_email_lower_idx` (86 MB) | dihapus | 18,84% heap untuk 1 kali pakai yang membaca 1 baris |
-| `hot_*_pkey`, `tulis_*` | dihapus bersama tabel ujinya | tabel bantu Q4 dan Q27, bukan bagian beban kerja |
+| `ev_terjadi_pada_idx` (43 MB) | dihapus | `idx_scan` 0, kembar dengan `idx_btree_terjadi` |
+| `ev_salah_idx` (60 MB) | dihapus | `idx_scan` 1 |
+| `ev_email_lower_idx` (86 MB) | dihapus | 18,84% heap untuk 3 baris terbaca |
+| `hot_*`, `tulis_*` | dihapus bersama tabel ujinya | tabel bantu Q4, Q6, dan Q27 |
 
-Total penghematan bila keempat kandidat hapus dieksekusi: **249 MB dari 434 MB**, sehingga
-jejak index turun ke sekitar 185 MB atau 40% dari heap.
+**Total penghematan: 249 MB dari 438 MB**, sehingga jejak index turun ke sekitar 189 MB atau
+41% dari heap. Bila `idx_btree_terjadi` ikut diganti BRIN, penghematannya 292 MB dan jejak
+index tinggal 32% heap.
 
-Satu hal yang harus dibereskan sebelum pengumpulan: **index BRIN tidak pernah dibuat oleh
-berkas mana pun di repositori** (lihat catatan pada Q30), sehingga rekomendasi tentang BRIN
-belum bisa direproduksi dari berkas yang ada. Lengkapi `q19_brin_correlation.sql` dengan
-`CREATE INDEX ... USING brin (terjadi_pada) WITH (pages_per_range=128)`, perbaiki
-`pg_relation_size('idx_gin_payload')` menjadi `'lab6.idx_gin_payload'` pada
-`q17_gin_payload.sql`, lalu jalankan ulang Q17 dan Q19–Q20.
-
----
+**Urutan eksekusi yang disarankan.** Hapus dulu yang `idx_scan`-nya nol atau satu
+(`ev_terjadi_pada_idx`, `ev_salah_idx`) karena risikonya paling kecil. Lalu hapus
+`ev_benar_idx` dan amati apakah rencana query pelanggan berpindah mulus ke `ev_cover3_idx`.
+`ev_email_lower_idx` dihapus terakhir setelah dipastikan tidak ada fitur pencarian email yang
+memakainya — 86 MB itu menggoda, tetapi satu fitur login yang terlewat akan berubah menjadi
+Seq Scan 107 ms untuk setiap percobaan masuk.
 
 ## Penggunaan AI dan Verifikasi
 

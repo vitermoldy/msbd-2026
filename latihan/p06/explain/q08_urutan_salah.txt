@@ -1,10 +1,80 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.139 ms
+CREATE INDEX ev_salah_idx
+ON lab6.event_log (terjadi_pada, customer_id);
+CREATE INDEX
+Time: 441.265 ms
+ANALYZE lab6.event_log;
+ANALYZE
+Time: 229.770 ms
+SELECT pg_size_pretty(pg_relation_size('lab6.ev_salah_idx')) AS ukuran_ev_salah_idx;
+ ukuran_ev_salah_idx 
+---------------------
+ 60 MB
+(1 row)
+
+Time: 0.266 ms
+===== Q8 urutan salah · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT event_id, jumlah
+FROM lab6.event_log
+WHERE customer_id = 4211
+  AND terjadi_pada >= timestamptz '2024-06-01 00:00+07'
+ORDER BY terjadi_pada DESC
+LIMIT 20;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=0.43..25019.52 rows=17 width=22) (actual time=0.273..68.814 rows=12 loops=1)
-   Buffers: shared hit=3819
-   ->  Index Scan Backward using ev_salah_idx on event_log  (cost=0.43..25019.52 rows=17 width=22) (actual time=0.271..68.783 rows=12 loops=1)
+ Limit  (cost=0.43..25086.33 rows=17 width=22) (actual time=1.263..21.167 rows=15 loops=1)
+   Buffers: shared hit=24 read=3801 written=3422
+   ->  Index Scan Backward using ev_salah_idx on event_log  (cost=0.43..25086.33 rows=17 width=22) (actual time=1.262..21.162 rows=15 loops=1)
          Index Cond: ((terjadi_pada >= '2024-05-31 17:00:00+00'::timestamp with time zone) AND (customer_id = 4211))
-         Buffers: shared hit=3819
- Planning Time: 0.218 ms
- Execution Time: 68.896 ms
+         Buffers: shared hit=24 read=3801 written=3422
+ Planning:
+   Buffers: shared hit=49 read=1
+ Planning Time: 0.122 ms
+ Execution Time: 21.184 ms
+(9 rows)
+
+Time: 21.646 ms
+===== Q8 urutan salah · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT event_id, jumlah
+FROM lab6.event_log
+WHERE customer_id = 4211
+  AND terjadi_pada >= timestamptz '2024-06-01 00:00+07'
+ORDER BY terjadi_pada DESC
+LIMIT 20;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.43..25086.33 rows=17 width=22) (actual time=0.709..10.398 rows=15 loops=1)
+   Buffers: shared hit=3825
+   ->  Index Scan Backward using ev_salah_idx on event_log  (cost=0.43..25086.33 rows=17 width=22) (actual time=0.709..10.395 rows=15 loops=1)
+         Index Cond: ((terjadi_pada >= '2024-05-31 17:00:00+00'::timestamp with time zone) AND (customer_id = 4211))
+         Buffers: shared hit=3825
+ Planning Time: 0.063 ms
+ Execution Time: 10.408 ms
 (7 rows)
+
+Time: 10.793 ms
+===== Q8 urutan salah · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT event_id, jumlah
+FROM lab6.event_log
+WHERE customer_id = 4211
+  AND terjadi_pada >= timestamptz '2024-06-01 00:00+07'
+ORDER BY terjadi_pada DESC
+LIMIT 20;
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.43..25086.33 rows=17 width=22) (actual time=0.660..9.836 rows=15 loops=1)
+   Buffers: shared hit=3825
+   ->  Index Scan Backward using ev_salah_idx on event_log  (cost=0.43..25086.33 rows=17 width=22) (actual time=0.660..9.833 rows=15 loops=1)
+         Index Cond: ((terjadi_pada >= '2024-05-31 17:00:00+00'::timestamp with time zone) AND (customer_id = 4211))
+         Buffers: shared hit=3825
+ Planning Time: 0.047 ms
+ Execution Time: 9.847 ms
+(7 rows)
+
+Time: 10.245 ms

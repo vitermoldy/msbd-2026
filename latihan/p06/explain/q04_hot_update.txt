@@ -1,0 +1,135 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.176 ms
+DROP TABLE IF EXISTS lab6.hot_penuh;
+NOTICE:  table "hot_penuh" does not exist, skipping
+DROP TABLE
+Time: 1.408 ms
+CREATE TABLE lab6.hot_penuh (
+    id INT PRIMARY KEY,
+    nama TEXT,
+    catatan TEXT
+) WITH (fillfactor = 100);
+CREATE TABLE
+Time: 3.183 ms
+DROP TABLE IF EXISTS lab6.hot_longgar;
+DROP TABLE
+Time: 0.128 ms
+CREATE TABLE lab6.hot_longgar (
+    id INT PRIMARY KEY,
+    nama TEXT,
+    catatan TEXT
+) WITH (fillfactor = 80);
+NOTICE:  table "hot_longgar" does not exist, skipping
+CREATE TABLE
+Time: 1.905 ms
+INSERT INTO lab6.hot_penuh SELECT g, 'User ' || g, 'Awal' FROM generate_series(1, 10000) g;
+INSERT 0 10000
+Time: 10.211 ms
+INSERT INTO lab6.hot_longgar SELECT g, 'User ' || g, 'Awal' FROM generate_series(1, 10000) g;
+INSERT 0 10000
+Time: 9.580 ms
+CREATE INDEX hot_longgar_nama_idx ON lab6.hot_longgar (nama);
+CREATE INDEX
+Time: 13.498 ms
+VACUUM ANALYZE lab6.hot_penuh;
+VACUUM
+Time: 13.167 ms
+VACUUM ANALYZE lab6.hot_longgar;
+VACUUM
+Time: 11.831 ms
+SELECT 'sebelum UPDATE' AS tahap,
+       pg_size_pretty(pg_relation_size('lab6.hot_penuh'))   AS hot_penuh,
+       pg_size_pretty(pg_relation_size('lab6.hot_longgar')) AS hot_longgar;
+     tahap      | hot_penuh | hot_longgar 
+----------------+-----------+-------------
+ sebelum UPDATE | 512 kB    | 640 kB
+(1 row)
+
+Time: 0.244 ms
+UPDATE lab6.hot_penuh SET catatan = 'Revisi';
+UPDATE 10000
+Time: 18.698 ms
+UPDATE lab6.hot_longgar SET catatan = 'Revisi';
+UPDATE 10000
+Time: 32.016 ms
+SELECT pg_stat_force_next_flush();
+ pg_stat_force_next_flush 
+--------------------------
+ 
+(1 row)
+
+Time: 0.589 ms
+SELECT
+    relname AS nama_tabel,
+    n_tup_upd AS total_update,
+    n_tup_hot_upd AS total_hot_update,
+    ROUND((n_tup_hot_upd::numeric / NULLIF(n_tup_upd, 0)) * 100, 2) AS persentase_hot_pct
+FROM pg_stat_user_tables
+WHERE relname IN ('hot_penuh', 'hot_longgar')
+ORDER BY relname;
+ nama_tabel  | total_update | total_hot_update | persentase_hot_pct 
+-------------+--------------+------------------+--------------------
+ hot_longgar |        10000 |             2560 |              25.60
+ hot_penuh   |        10000 |                0 |               0.00
+(2 rows)
+
+Time: 6.027 ms
+SELECT 'sesudah UPDATE' AS tahap,
+       pg_size_pretty(pg_relation_size('lab6.hot_penuh'))   AS hot_penuh,
+       pg_size_pretty(pg_relation_size('lab6.hot_longgar')) AS hot_longgar,
+       pg_size_pretty(pg_total_relation_size('lab6.hot_penuh'))   AS total_penuh,
+       pg_size_pretty(pg_total_relation_size('lab6.hot_longgar')) AS total_longgar;
+     tahap      | hot_penuh | hot_longgar | total_penuh | total_longgar 
+----------------+-----------+-------------+-------------+---------------
+ sesudah UPDATE | 1024 kB   | 1120 kB     | 1520 kB     | 2248 kB
+(1 row)
+
+Time: 0.324 ms
+SELECT n_tup_upd AS upd_sebelum_q6, n_tup_hot_upd AS hot_sebelum_q6
+FROM pg_stat_user_tables WHERE relname = 'hot_longgar';
+ upd_sebelum_q6 | hot_sebelum_q6 
+----------------+----------------
+          10000 |           2560
+(1 row)
+
+Time: 0.482 ms
+UPDATE lab6.hot_longgar SET nama = nama || '!' WHERE id <= 5000;
+UPDATE 5000
+Time: 21.005 ms
+SELECT pg_stat_force_next_flush();
+ pg_stat_force_next_flush 
+--------------------------
+ 
+(1 row)
+
+Time: 0.148 ms
+SELECT 'sesudah UPDATE kolom terindeks (nama)' AS tahap,
+       n_tup_upd, n_tup_hot_upd
+FROM pg_stat_user_tables WHERE relname = 'hot_longgar';
+                 tahap                 | n_tup_upd | n_tup_hot_upd 
+---------------------------------------+-----------+---------------
+ sesudah UPDATE kolom terindeks (nama) |     15000 |          2560
+(1 row)
+
+Time: 0.492 ms
+UPDATE lab6.hot_longgar SET catatan = 'Revisi 2' WHERE id <= 5000;
+UPDATE 5000
+Time: 12.315 ms
+SELECT pg_stat_force_next_flush();
+ pg_stat_force_next_flush 
+--------------------------
+ 
+(1 row)
+
+Time: 0.121 ms
+SELECT 'sesudah UPDATE kolom tidak terindeks (catatan)' AS tahap,
+       n_tup_upd, n_tup_hot_upd
+FROM pg_stat_user_tables WHERE relname = 'hot_longgar';
+                     tahap                      | n_tup_upd | n_tup_hot_upd 
+------------------------------------------------+-----------+---------------
+ sesudah UPDATE kolom tidak terindeks (catatan) |     20000 |          5537
+(1 row)
+
+Time: 0.468 ms

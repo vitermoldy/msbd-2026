@@ -1,0 +1,104 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.150 ms
+CREATE INDEX IF NOT EXISTS idx_gin_payload ON lab6.event_log USING gin (payload jsonb_path_ops);
+CREATE INDEX
+Time: 774.002 ms
+ANALYZE lab6.event_log;
+ANALYZE
+Time: 327.828 ms
+===== Q17 payload @> promo dengan GIN · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE payload @> '{"promo": true}';
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=712.51..63374.91 rows=76735 width=194) (actual time=18.145..169.310 rows=80000 loops=1)
+   Recheck Cond: (payload @> '{"promo": true}'::jsonb)
+   Heap Blocks: exact=58567
+   Buffers: shared hit=6267 read=52321 written=10179
+   ->  Bitmap Index Scan on idx_gin_payload  (cost=0.00..693.32 rows=76735 width=0) (actual time=10.724..10.724 rows=80000 loops=1)
+         Index Cond: (payload @> '{"promo": true}'::jsonb)
+         Buffers: shared hit=21
+ Planning:
+   Buffers: shared hit=98
+ Planning Time: 0.235 ms
+ Execution Time: 171.385 ms
+(11 rows)
+
+Time: 172.125 ms
+===== Q17 payload @> promo dengan GIN · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE payload @> '{"promo": true}';
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=712.51..63374.91 rows=76735 width=194) (actual time=15.243..141.213 rows=80000 loops=1)
+   Recheck Cond: (payload @> '{"promo": true}'::jsonb)
+   Heap Blocks: exact=58567
+   Buffers: shared hit=1 read=58587
+   ->  Bitmap Index Scan on idx_gin_payload  (cost=0.00..693.32 rows=76735 width=0) (actual time=7.653..7.654 rows=80000 loops=1)
+         Index Cond: (payload @> '{"promo": true}'::jsonb)
+         Buffers: shared hit=1 read=20
+ Planning:
+   Buffers: shared read=1
+ Planning Time: 0.079 ms
+ Execution Time: 143.347 ms
+(11 rows)
+
+Time: 143.718 ms
+===== Q17 payload @> promo dengan GIN · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE payload @> '{"promo": true}';
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=712.51..63374.91 rows=76735 width=194) (actual time=14.920..139.825 rows=80000 loops=1)
+   Recheck Cond: (payload @> '{"promo": true}'::jsonb)
+   Heap Blocks: exact=58567
+   Buffers: shared hit=1 read=58587
+   ->  Bitmap Index Scan on idx_gin_payload  (cost=0.00..693.32 rows=76735 width=0) (actual time=6.897..6.898 rows=80000 loops=1)
+         Index Cond: (payload @> '{"promo": true}'::jsonb)
+         Buffers: shared hit=1 read=20
+ Planning:
+   Buffers: shared read=1
+ Planning Time: 0.082 ms
+ Execution Time: 141.800 ms
+(11 rows)
+
+Time: 142.198 ms
+===== Q17 tanpa GIN · run 1
+BEGIN;
+BEGIN
+Time: 0.150 ms
+DROP INDEX lab6.idx_gin_payload;
+DROP INDEX
+Time: 4.515 ms
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE payload @> '{"promo": true}';
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83570.60 rows=76735 width=194) (actual time=0.016..323.450 rows=80000 loops=1)
+   Filter: (payload @> '{"promo": true}'::jsonb)
+   Rows Removed by Filter: 1920000
+   Buffers: shared hit=16301 read=42269
+ Planning:
+   Buffers: shared hit=1 read=2
+ Planning Time: 0.099 ms
+ Execution Time: 325.603 ms
+(8 rows)
+
+Time: 326.007 ms
+ROLLBACK;
+ROLLBACK
+Time: 0.132 ms
+SELECT
+    pg_size_pretty(pg_relation_size('lab6.idx_gin_payload')) AS ukuran_gin_payload,
+    pg_size_pretty(pg_relation_size('lab6.event_log')) AS ukuran_heap,
+    round(100.0*pg_relation_size('lab6.idx_gin_payload')/pg_relation_size('lab6.event_log'), 2)
+      AS persen_dari_heap,
+    (SELECT count(*) FROM lab6.event_log WHERE payload @> '{"promo": true}') AS baris_cocok;
+ ukuran_gin_payload | ukuran_heap | persen_dari_heap | baris_cocok 
+--------------------+-------------+------------------+-------------
+ 7096 kB            | 458 MB      |             1.51 |       80000
+(1 row)
+
+Time: 146.717 ms

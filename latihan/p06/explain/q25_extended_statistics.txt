@@ -1,0 +1,119 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.128 ms
+DROP STATISTICS IF EXISTS lab6.stat_wilayah_kota;
+NOTICE:  statistics object "lab6.stat_wilayah_kota" does not exist, skipping
+DROP STATISTICS
+Time: 0.249 ms
+SELECT count(DISTINCT wilayah) AS wilayah_distinct,
+       count(DISTINCT kota) AS kota_distinct,
+       count(*) FILTER (WHERE wilayah = 'SUMUT' AND kota = 'SUMUT-3') AS baris_nyata,
+       round(2000000.0/(count(DISTINCT wilayah)*count(DISTINCT kota)), 0) AS estimasi_kalau_mandiri
+FROM lab6.event_log;
+ wilayah_distinct | kota_distinct | baris_nyata | estimasi_kalau_mandiri 
+------------------+---------------+-------------+------------------------
+                5 |            45 |       44445 |                   8889
+(1 row)
+
+Time: 804.980 ms
+SELECT DISTINCT kota FROM lab6.event_log WHERE wilayah = 'SUMUT' ORDER BY kota LIMIT 9;
+  kota   
+---------
+ SUMUT-1
+ SUMUT-2
+ SUMUT-3
+ SUMUT-4
+ SUMUT-5
+ SUMUT-6
+ SUMUT-7
+ SUMUT-8
+ SUMUT-9
+(9 rows)
+
+Time: 115.038 ms
+===== Q25a sebelum extended statistics · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE wilayah = 'SUMUT' AND kota = 'SUMUT-3';
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..88571.20 rows=9117 width=194) (actual time=0.007..111.209 rows=44445 loops=1)
+   Filter: ((wilayah = 'SUMUT'::text) AND (kota = 'SUMUT-3'::text))
+   Rows Removed by Filter: 1955555
+   Buffers: shared hit=16259 read=42311
+ Planning:
+   Buffers: shared hit=23 read=4
+ Planning Time: 0.099 ms
+ Execution Time: 112.228 ms
+(8 rows)
+
+Time: 112.614 ms
+===== Q25a sebelum extended statistics · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE wilayah = 'SUMUT' AND kota = 'SUMUT-3';
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..88571.20 rows=9117 width=194) (actual time=0.013..105.852 rows=44445 loops=1)
+   Filter: ((wilayah = 'SUMUT'::text) AND (kota = 'SUMUT-3'::text))
+   Rows Removed by Filter: 1955555
+   Buffers: shared hit=16291 read=42279
+ Planning Time: 0.069 ms
+ Execution Time: 106.790 ms
+(6 rows)
+
+Time: 107.252 ms
+CREATE STATISTICS IF NOT EXISTS lab6.stat_wilayah_kota (dependencies, ndistinct)
+ON wilayah, kota FROM lab6.event_log;
+CREATE STATISTICS
+Time: 4.371 ms
+----- statistik sudah dibuat tetapi ANALYZE belum dijalankan
+EXPLAIN SELECT * FROM lab6.event_log WHERE wilayah = 'SUMUT' AND kota = 'SUMUT-3';
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..88571.20 rows=9117 width=194)
+   Filter: ((wilayah = 'SUMUT'::text) AND (kota = 'SUMUT-3'::text))
+(2 rows)
+
+Time: 0.311 ms
+ANALYZE lab6.event_log;
+ANALYZE
+Time: 264.574 ms
+===== Q25b sesudah ANALYZE · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE wilayah = 'SUMUT' AND kota = 'SUMUT-3';
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..88567.74 rows=44730 width=194) (actual time=0.010..106.226 rows=44445 loops=1)
+   Filter: ((wilayah = 'SUMUT'::text) AND (kota = 'SUMUT-3'::text))
+   Rows Removed by Filter: 1955555
+   Buffers: shared hit=16233 read=42337
+ Planning:
+   Buffers: shared hit=111 read=9
+ Planning Time: 0.196 ms
+ Execution Time: 107.178 ms
+(8 rows)
+
+Time: 107.688 ms
+===== Q25b sesudah ANALYZE · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE wilayah = 'SUMUT' AND kota = 'SUMUT-3';
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..88567.74 rows=44730 width=194) (actual time=0.213..105.765 rows=44445 loops=1)
+   Filter: ((wilayah = 'SUMUT'::text) AND (kota = 'SUMUT-3'::text))
+   Rows Removed by Filter: 1955555
+   Buffers: shared hit=16241 read=42329
+ Planning Time: 0.073 ms
+ Execution Time: 106.704 ms
+(6 rows)
+
+Time: 107.039 ms
+SELECT stxdndistinct AS ndistinct, stxddependencies AS dependencies
+FROM pg_statistic_ext s JOIN pg_statistic_ext_data d ON d.stxoid = s.oid
+WHERE s.stxname = 'stat_wilayah_kota';
+  ndistinct   |     dependencies     
+--------------+----------------------
+ {"5, 6": 45} | {"6 => 5": 1.000000}
+(1 row)
+
+Time: 0.674 ms

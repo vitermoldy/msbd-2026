@@ -5,10 +5,10 @@ SELECT pg_size_pretty(pg_relation_size('lab6.event_log'))             AS heap,
        pg_relation_size('lab6.event_log')/2000000.0                   AS byte_per_baris_heap;
   heap  | semua_index | total  | byte_per_baris_heap  
 --------+-------------+--------+----------------------
- 458 MB | 43 MB       | 501 MB | 239.9109120000000000
+ 458 MB | 43 MB       | 501 MB | 239.8986240000000000
 (1 row)
 
-Time: 16.342 ms
+Time: 4.776 ms
 SELECT round(avg(pg_column_size(event_id)),1)        AS event_id,
        round(avg(pg_column_size(customer_id)),1)     AS customer_id,
        round(avg(pg_column_size(terjadi_pada)),1)    AS terjadi_pada,
@@ -26,7 +26,7 @@ FROM lab6.event_log;
       8.0 |         4.0 |          8.0 |    7.3 |     5.8 |  7.8 |  24.4 |            16.0 |    7.0 | 45.0 |    64.7
 (1 row)
 
-Time: 412.250 ms
+Time: 123.689 ms
 SELECT round(avg(pg_column_size(e.*)),1) AS avg_tuple_tanpa_header,
        round(avg(pg_column_size(e.*)) + 23 + 4, 1) AS perkiraan_dengan_header_dan_pointer
 FROM lab6.event_log e;
@@ -35,12 +35,12 @@ FROM lab6.event_log e;
                   226.0 |                               253.0
 (1 row)
 
-Time: 188.771 ms
+Time: 140.036 ms
 SELECT relpages, reltuples::bigint, round((reltuples/relpages)::numeric,1) AS tuple_per_halaman_katalog
 FROM pg_class WHERE oid = 'lab6.event_log'::regclass;
  relpages | reltuples | tuple_per_halaman_katalog 
 ----------+-----------+---------------------------
-    58572 |   1999945 |                      34.1
+    58569 |   2000102 |                      34.1
 (1 row)
 
-Time: 9.319 ms
+Time: 3.602 ms

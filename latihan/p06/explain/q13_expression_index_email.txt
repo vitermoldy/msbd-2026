@@ -1,0 +1,124 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.126 ms
+CREATE INDEX IF NOT EXISTS ev_email_lower_idx
+    ON lab6.event_log (lower(email));
+CREATE INDEX
+Time: 1634.485 ms (00:01.634)
+ANALYZE lab6.event_log;
+ANALYZE
+Time: 267.927 ms
+SELECT pg_size_pretty(pg_relation_size('lab6.ev_email_lower_idx')) AS ukuran_index_ekspresi;
+ ukuran_index_ekspresi 
+-----------------------
+ 86 MB
+(1 row)
+
+Time: 0.297 ms
+SELECT email FROM lab6.event_log WHERE event_id = 12345;
+         email          
+------------------------
+ user12345@contoh.ac.id
+(1 row)
+
+Time: 0.393 ms
+===== Q13a email = ... tanpa ekspresi · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE email = 'user12345@contoh.ac.id';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83568.89 rows=1 width=194) (actual time=0.713..110.767 rows=1 loops=1)
+   Filter: (email = 'user12345@contoh.ac.id'::text)
+   Rows Removed by Filter: 1999999
+   Buffers: shared hit=8500 read=50069
+ Planning:
+   Buffers: shared hit=36
+ Planning Time: 0.053 ms
+ Execution Time: 110.777 ms
+(8 rows)
+
+Time: 111.070 ms
+===== Q13a email = ... tanpa ekspresi · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE email = 'user12345@contoh.ac.id';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83568.89 rows=1 width=194) (actual time=0.911..108.685 rows=1 loops=1)
+   Filter: (email = 'user12345@contoh.ac.id'::text)
+   Rows Removed by Filter: 1999999
+   Buffers: shared hit=8788 read=49781
+ Planning Time: 0.062 ms
+ Execution Time: 108.698 ms
+(6 rows)
+
+Time: 109.112 ms
+===== Q13a email = ... tanpa ekspresi · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE email = 'user12345@contoh.ac.id';
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..83568.89 rows=1 width=194) (actual time=0.644..107.889 rows=1 loops=1)
+   Filter: (email = 'user12345@contoh.ac.id'::text)
+   Rows Removed by Filter: 1999999
+   Buffers: shared hit=8820 read=49749
+ Planning Time: 0.056 ms
+ Execution Time: 107.902 ms
+(6 rows)
+
+Time: 108.261 ms
+===== Q13b lower(email) = ... cocok dengan index · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE lower(email) = lower('user12345@contoh.ac.id');
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ev_email_lower_idx on event_log  (cost=0.43..8.45 rows=1 width=194) (actual time=0.017..0.017 rows=1 loops=1)
+   Index Cond: (lower(email) = 'user12345@contoh.ac.id'::text)
+   Buffers: shared hit=1 read=3
+ Planning:
+   Buffers: shared hit=3
+ Planning Time: 0.078 ms
+ Execution Time: 0.024 ms
+(7 rows)
+
+Time: 0.295 ms
+===== Q13b lower(email) = ... cocok dengan index · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE lower(email) = lower('user12345@contoh.ac.id');
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ev_email_lower_idx on event_log  (cost=0.43..8.45 rows=1 width=194) (actual time=0.008..0.009 rows=1 loops=1)
+   Index Cond: (lower(email) = 'user12345@contoh.ac.id'::text)
+   Buffers: shared hit=4
+ Planning Time: 0.034 ms
+ Execution Time: 0.014 ms
+(5 rows)
+
+Time: 0.160 ms
+===== Q13b lower(email) = ... cocok dengan index · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE lower(email) = lower('user12345@contoh.ac.id');
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using ev_email_lower_idx on event_log  (cost=0.43..8.45 rows=1 width=194) (actual time=0.007..0.007 rows=1 loops=1)
+   Index Cond: (lower(email) = 'user12345@contoh.ac.id'::text)
+   Buffers: shared hit=4
+ Planning Time: 0.028 ms
+ Execution Time: 0.012 ms
+(5 rows)
+
+Time: 0.134 ms
+===== Q13c upper(email) = ... ekspresi berbeda · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log WHERE upper(email) = upper('user12345@contoh.ac.id');
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Seq Scan on event_log  (cost=0.00..88568.86 rows=10000 width=194) (actual time=2.317..350.268 rows=1 loops=1)
+   Filter: (upper(email) = 'USER12345@CONTOH.AC.ID'::text)
+   Rows Removed by Filter: 1999999
+   Buffers: shared hit=8859 read=49710
+ Planning Time: 0.098 ms
+ Execution Time: 350.281 ms
+(6 rows)
+
+Time: 350.728 ms

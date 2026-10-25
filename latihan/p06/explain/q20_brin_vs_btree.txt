@@ -1,0 +1,166 @@
+Timing is on.
+SET max_parallel_workers_per_gather = 0;
+SET
+Time: 0.165 ms
+SELECT count(*) AS baris_tujuh_hari,
+       round(100.0*count(*)/2000000, 2) AS persen_tabel
+FROM lab6.event_log
+WHERE terjadi_pada >= '2024-05-01 00:00+07'
+  AND terjadi_pada <  '2024-05-08 00:00+07';
+ baris_tujuh_hari | persen_tabel 
+------------------+--------------
+            46523 |         2.33
+(1 row)
+
+Time: 3.186 ms
+BEGIN;
+BEGIN
+Time: 0.062 ms
+DROP INDEX lab6.idx_btree_terjadi;
+DROP INDEX
+Time: 0.363 ms
+DROP INDEX lab6.ev_terjadi_pada_idx;
+DROP INDEX
+Time: 0.086 ms
+DROP INDEX lab6.ev_cover3_idx;
+DROP INDEX
+Time: 0.075 ms
+===== Q20a hanya BRIN · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log
+WHERE terjadi_pada >= '2024-05-01 00:00+07'
+  AND terjadi_pada <  '2024-05-08 00:00+07';
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=27.86..59071.49 rows=46021 width=194) (actual time=0.173..7.699 rows=46523 loops=1)
+   Recheck Cond: ((terjadi_pada >= '2024-04-30 17:00:00+00'::timestamp with time zone) AND (terjadi_pada < '2024-05-07 17:00:00+00'::timestamp with time zone))
+   Rows Removed by Index Recheck: 4244
+   Heap Blocks: lossy=1482
+   Buffers: shared hit=82 read=1409
+   ->  Bitmap Index Scan on idx_brin_terjadi  (cost=0.00..16.35 rows=48035 width=0) (actual time=0.081..0.081 rows=14820 loops=1)
+         Index Cond: ((terjadi_pada >= '2024-04-30 17:00:00+00'::timestamp with time zone) AND (terjadi_pada < '2024-05-07 17:00:00+00'::timestamp with time zone))
+         Buffers: shared hit=8 read=1
+ Planning:
+   Buffers: shared hit=33
+ Planning Time: 0.086 ms
+ Execution Time: 8.869 ms
+(12 rows)
+
+Time: 9.132 ms
+===== Q20a hanya BRIN · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log
+WHERE terjadi_pada >= '2024-05-01 00:00+07'
+  AND terjadi_pada <  '2024-05-08 00:00+07';
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=27.86..59071.49 rows=46021 width=194) (actual time=0.083..3.882 rows=46523 loops=1)
+   Recheck Cond: ((terjadi_pada >= '2024-04-30 17:00:00+00'::timestamp with time zone) AND (terjadi_pada < '2024-05-07 17:00:00+00'::timestamp with time zone))
+   Rows Removed by Index Recheck: 4244
+   Heap Blocks: lossy=1482
+   Buffers: shared hit=1485
+   ->  Bitmap Index Scan on idx_brin_terjadi  (cost=0.00..16.35 rows=48035 width=0) (actual time=0.043..0.044 rows=14820 loops=1)
+         Index Cond: ((terjadi_pada >= '2024-04-30 17:00:00+00'::timestamp with time zone) AND (terjadi_pada < '2024-05-07 17:00:00+00'::timestamp with time zone))
+         Buffers: shared hit=3
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.036 ms
+ Execution Time: 5.066 ms
+(12 rows)
+
+Time: 5.255 ms
+===== Q20a hanya BRIN · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log
+WHERE terjadi_pada >= '2024-05-01 00:00+07'
+  AND terjadi_pada <  '2024-05-08 00:00+07';
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on event_log  (cost=27.86..59071.49 rows=46021 width=194) (actual time=0.095..3.996 rows=46523 loops=1)
+   Recheck Cond: ((terjadi_pada >= '2024-04-30 17:00:00+00'::timestamp with time zone) AND (terjadi_pada < '2024-05-07 17:00:00+00'::timestamp with time zone))
+   Rows Removed by Index Recheck: 4244
+   Heap Blocks: lossy=1482
+   Buffers: shared hit=1485
+   ->  Bitmap Index Scan on idx_brin_terjadi  (cost=0.00..16.35 rows=48035 width=0) (actual time=0.045..0.046 rows=14820 loops=1)
+         Index Cond: ((terjadi_pada >= '2024-04-30 17:00:00+00'::timestamp with time zone) AND (terjadi_pada < '2024-05-07 17:00:00+00'::timestamp with time zone))
+         Buffers: shared hit=3
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.034 ms
+ Execution Time: 5.466 ms
+(12 rows)
+
+Time: 5.632 ms
+ROLLBACK;
+ROLLBACK
+Time: 0.076 ms
+BEGIN;
+BEGIN
+Time: 0.066 ms
+DROP INDEX lab6.idx_brin_terjadi;
+DROP INDEX
+Time: 0.124 ms
+DROP INDEX lab6.ev_terjadi_pada_idx;
+DROP INDEX
+Time: 0.060 ms
+DROP INDEX lab6.ev_cover3_idx;
+DROP INDEX
+Time: 0.129 ms
+===== Q20b hanya B-Tree · run 1
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log
+WHERE terjadi_pada >= '2024-05-01 00:00+07'
+  AND terjadi_pada <  '2024-05-08 00:00+07';
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_btree_terjadi on event_log  (cost=0.43..2779.85 rows=46021 width=194) (actual time=0.007..3.067 rows=46523 loops=1)
+   Index Cond: ((terjadi_pada >= '2024-04-30 17:00:00+00'::timestamp with time zone) AND (terjadi_pada < '2024-05-07 17:00:00+00'::timestamp with time zone))
+   Buffers: shared hit=1696
+ Planning:
+   Buffers: shared hit=15
+ Planning Time: 0.052 ms
+ Execution Time: 4.174 ms
+(7 rows)
+
+Time: 4.383 ms
+===== Q20b hanya B-Tree · run 2
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log
+WHERE terjadi_pada >= '2024-05-01 00:00+07'
+  AND terjadi_pada <  '2024-05-08 00:00+07';
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_btree_terjadi on event_log  (cost=0.43..2779.85 rows=46021 width=194) (actual time=0.009..2.937 rows=46523 loops=1)
+   Index Cond: ((terjadi_pada >= '2024-04-30 17:00:00+00'::timestamp with time zone) AND (terjadi_pada < '2024-05-07 17:00:00+00'::timestamp with time zone))
+   Buffers: shared hit=1696
+ Planning Time: 0.029 ms
+ Execution Time: 4.003 ms
+(5 rows)
+
+Time: 4.157 ms
+===== Q20b hanya B-Tree · run 3
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT * FROM lab6.event_log
+WHERE terjadi_pada >= '2024-05-01 00:00+07'
+  AND terjadi_pada <  '2024-05-08 00:00+07';
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_btree_terjadi on event_log  (cost=0.43..2779.85 rows=46021 width=194) (actual time=0.007..3.055 rows=46523 loops=1)
+   Index Cond: ((terjadi_pada >= '2024-04-30 17:00:00+00'::timestamp with time zone) AND (terjadi_pada < '2024-05-07 17:00:00+00'::timestamp with time zone))
+   Buffers: shared hit=1696
+ Planning Time: 0.036 ms
+ Execution Time: 4.143 ms
+(5 rows)
+
+Time: 4.350 ms
+ROLLBACK;
+ROLLBACK
+Time: 0.097 ms
+SELECT pg_size_pretty(pg_relation_size('lab6.idx_brin_terjadi')) AS ukuran_brin,
+       pg_size_pretty(pg_relation_size('lab6.idx_btree_terjadi')) AS ukuran_btree;
+ ukuran_brin | ukuran_btree 
+-------------+--------------
+ 32 kB       | 43 MB
+(1 row)
+
+Time: 0.204 ms

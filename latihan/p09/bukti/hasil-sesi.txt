@@ -1,0 +1,600 @@
+================================================================================
+ P09 - HASIL SESI MENTAH (Q1-Q10)
+================================================================================
+ Dihasilkan otomatis oleh latihan/p09/jalankan_dua_sesi.sh
+ Dua proses psql berjalan BERSAMAAN di dalam container, masing-masing diberi
+ perintah lewat FIFO terpisah. Nomor langkah adalah urutan waktu yang
+ sebenarnya, jadi langkah 041 benar-benar dijalankan setelah langkah 040
+ selesai dan sebelum langkah 042 dimulai.
+ Penanda "Sesi A" / "Sesi B" menunjukkan sesi yang menjalankan perintah itu.
+ Keluaran di bawah adalah keluaran psql apa adanya, termasuk pesan ERROR.
+================================================================================
+
+--- langkah 003 | Sesi A ---
+SELECT 'Sesi A' AS sesi, pg_backend_pid() AS pid;
+  sesi  |  pid  
+--------+-------
+ Sesi A | 11545
+(1 row)
+
+--- langkah 004 | Sesi B ---
+SELECT 'Sesi B' AS sesi, pg_backend_pid() AS pid;
+  sesi  |  pid  
+--------+-------
+ Sesi B | 11546
+(1 row)
+
+================================================================================
+ Kondisi uji
+================================================================================
+
+--- langkah 005 | Sesi A ---
+SELECT version();
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+
+--- langkah 006 | Sesi A ---
+SHOW transaction_isolation;
+ transaction_isolation 
+-----------------------
+ read committed
+(1 row)
+
+--- langkah 007 | Sesi A ---
+SHOW deadlock_timeout;
+ deadlock_timeout 
+------------------
+ 1s
+(1 row)
+
+--- langkah 008 | Sesi A ---
+SHOW lock_timeout;
+ lock_timeout 
+--------------
+ 0
+(1 row)
+
+--- langkah 009 | Sesi A ---
+SHOW statement_timeout;
+ statement_timeout 
+-------------------
+ 0
+(1 row)
+
+--- langkah 010 | Sesi A ---
+SHOW idle_in_transaction_session_timeout;
+ idle_in_transaction_session_timeout 
+-------------------------------------
+ 0
+(1 row)
+
+--- langkah 011 | Sesi A ---
+UPDATE lab9.rekening SET saldo = 1000000 WHERE rekening_id IN (1,2);
+UPDATE 2
+
+================================================================================
+ Q1 - Kondisi awal dan total saldo
+================================================================================
+
+--- langkah 012 | Sesi A ---
+SELECT rekening_id, pemilik, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id | pemilik |   saldo    
+-------------+---------+------------
+           1 | Ani     | 1000000.00
+           2 | Budi    | 1000000.00
+(2 rows)
+
+--- langkah 013 | Sesi A ---
+SELECT count(*) AS jumlah_rekening, sum(saldo) AS total_saldo FROM lab9.rekening;
+ jumlah_rekening | total_saldo 
+-----------------+-------------
+               2 |  2000000.00
+(1 row)
+
+================================================================================
+ Q2 - Perubahan sebelum COMMIT dilihat dari sesi lain
+================================================================================
+
+--- langkah 014 | Sesi A ---
+BEGIN;
+BEGIN
+
+--- langkah 015 | Sesi A ---
+UPDATE lab9.rekening SET saldo = saldo - 250000 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 016 | Sesi A ---
+SELECT rekening_id, pemilik, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id | pemilik |   saldo    
+-------------+---------+------------
+           1 | Ani     |  750000.00
+           2 | Budi    | 1000000.00
+(2 rows)
+
+--- langkah 017 | Sesi B ---
+SELECT rekening_id, pemilik, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id | pemilik |   saldo    
+-------------+---------+------------
+           1 | Ani     | 1000000.00
+           2 | Budi    | 1000000.00
+(2 rows)
+
+--- langkah 018 | Sesi B ---
+SELECT pg_blocking_pids(pg_backend_pid()) AS menunggu_pid;
+ menunggu_pid 
+--------------
+ {}
+(1 row)
+
+--- langkah 019 | Sesi A ---
+ROLLBACK;
+ROLLBACK
+
+--- langkah 020 | Sesi B ---
+SELECT rekening_id, pemilik, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id | pemilik |   saldo    
+-------------+---------+------------
+           1 | Ani     | 1000000.00
+           2 | Budi    | 1000000.00
+(2 rows)
+
+================================================================================
+ Q3 - COMMIT lawan ROLLBACK
+================================================================================
+
+--- langkah 021 | Sesi A ---
+BEGIN;
+BEGIN
+
+--- langkah 022 | Sesi A ---
+UPDATE lab9.rekening SET saldo = saldo - 100000 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 023 | Sesi A ---
+UPDATE lab9.rekening SET saldo = saldo + 100000 WHERE rekening_id = 2;
+UPDATE 1
+
+--- langkah 024 | Sesi A ---
+COMMIT;
+COMMIT
+
+--- langkah 025 | Sesi A ---
+SELECT rekening_id, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id |   saldo    
+-------------+------------
+           1 |  900000.00
+           2 | 1100000.00
+(2 rows)
+
+--- langkah 026 | Sesi A ---
+BEGIN;
+BEGIN
+
+--- langkah 027 | Sesi A ---
+UPDATE lab9.rekening SET saldo = saldo - 400000 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 028 | Sesi A ---
+SELECT rekening_id, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id |   saldo    
+-------------+------------
+           1 |  500000.00
+           2 | 1100000.00
+(2 rows)
+
+--- langkah 029 | Sesi A ---
+ROLLBACK;
+ROLLBACK
+
+--- langkah 030 | Sesi A ---
+SELECT rekening_id, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id |   saldo    
+-------------+------------
+           1 |  900000.00
+           2 | 1100000.00
+(2 rows)
+
+================================================================================
+ Q4 - SAVEPOINT dan ROLLBACK TO SAVEPOINT
+================================================================================
+
+--- langkah 031 | Sesi A ---
+BEGIN;
+BEGIN
+
+--- langkah 032 | Sesi A ---
+UPDATE lab9.rekening SET saldo = saldo - 50000 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 033 | Sesi A ---
+SAVEPOINT sebelum_transfer_kedua;
+SAVEPOINT
+
+--- langkah 034 | Sesi A ---
+UPDATE lab9.rekening SET saldo = saldo - 70000 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 035 | Sesi A ---
+SELECT saldo AS sesudah_tahap_dua FROM lab9.rekening WHERE rekening_id = 1;
+ sesudah_tahap_dua 
+-------------------
+         780000.00
+(1 row)
+
+--- langkah 036 | Sesi A ---
+ROLLBACK TO SAVEPOINT sebelum_transfer_kedua;
+ROLLBACK
+
+--- langkah 037 | Sesi A ---
+SELECT saldo AS sesudah_rollback_savepoint FROM lab9.rekening WHERE rekening_id = 1;
+ sesudah_rollback_savepoint 
+----------------------------
+                  850000.00
+(1 row)
+
+--- langkah 038 | Sesi A ---
+COMMIT;
+COMMIT
+
+--- langkah 039 | Sesi A ---
+SELECT rekening_id, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id |   saldo    
+-------------+------------
+           1 |  850000.00
+           2 | 1100000.00
+(2 rows)
+
+================================================================================
+ Q5 - Atomicity dan CHECK (saldo >= 0)
+================================================================================
+
+--- langkah 040 | Sesi A ---
+BEGIN;
+BEGIN
+
+--- langkah 041 | Sesi A ---
+UPDATE lab9.rekening SET saldo = saldo + 1 WHERE rekening_id = 2;
+UPDATE 1
+
+--- langkah 042 | Sesi A ---
+UPDATE lab9.rekening SET saldo = saldo - 99999999 WHERE rekening_id = 1;
+ERROR:  23514: new row for relation "rekening" violates check constraint "rekening_saldo_check"
+DETAIL:  Failing row contains (1, Ani, -99149999.00).
+SCHEMA NAME:  lab9
+TABLE NAME:  rekening
+CONSTRAINT NAME:  rekening_saldo_check
+LOCATION:  ExecConstraints, execMain.c:2074
+
+--- langkah 043 | Sesi A ---
+SELECT rekening_id, saldo FROM lab9.rekening ORDER BY rekening_id;
+ERROR:  25P02: current transaction is aborted, commands ignored until end of transaction block
+LOCATION:  exec_simple_query, postgres.c:1141
+
+--- langkah 044 | Sesi A ---
+ROLLBACK;
+ROLLBACK
+
+--- langkah 045 | Sesi A ---
+SELECT rekening_id, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id |   saldo    
+-------------+------------
+           1 |  850000.00
+           2 | 1100000.00
+(2 rows)
+
+--- langkah 046 | Sesi A ---
+SELECT sum(saldo) AS total_saldo FROM lab9.rekening;
+ total_saldo 
+-------------
+  1950000.00
+(1 row)
+
+--- langkah 047 | Sesi A ---
+UPDATE lab9.rekening SET saldo = 1000000 WHERE rekening_id IN (1,2);
+UPDATE 2
+
+================================================================================
+ Q6 - Non-repeatable read pada READ COMMITTED
+================================================================================
+
+--- langkah 048 | Sesi A ---
+BEGIN;
+BEGIN
+
+--- langkah 049 | Sesi A ---
+SHOW transaction_isolation;
+ transaction_isolation 
+-----------------------
+ read committed
+(1 row)
+
+--- langkah 050 | Sesi A ---
+SELECT saldo AS bacaan_pertama FROM lab9.rekening WHERE rekening_id = 1;
+ bacaan_pertama 
+----------------
+     1000000.00
+(1 row)
+
+--- langkah 051 | Sesi B ---
+UPDATE lab9.rekening SET saldo = saldo - 300000 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 052 | Sesi A ---
+SELECT saldo AS bacaan_kedua FROM lab9.rekening WHERE rekening_id = 1;
+ bacaan_kedua 
+--------------
+    700000.00
+(1 row)
+
+--- langkah 053 | Sesi A ---
+COMMIT;
+COMMIT
+
+--- langkah 054 | Sesi A ---
+UPDATE lab9.rekening SET saldo = 1000000 WHERE rekening_id IN (1,2);
+UPDATE 2
+
+================================================================================
+ Q7 - Skenario sama pada REPEATABLE READ
+================================================================================
+
+--- langkah 055 | Sesi A ---
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+
+--- langkah 056 | Sesi A ---
+SHOW transaction_isolation;
+ transaction_isolation 
+-----------------------
+ repeatable read
+(1 row)
+
+--- langkah 057 | Sesi A ---
+SELECT saldo AS bacaan_pertama FROM lab9.rekening WHERE rekening_id = 1;
+ bacaan_pertama 
+----------------
+     1000000.00
+(1 row)
+
+--- langkah 058 | Sesi B ---
+UPDATE lab9.rekening SET saldo = saldo - 300000 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 059 | Sesi A ---
+SELECT saldo AS bacaan_kedua FROM lab9.rekening WHERE rekening_id = 1;
+ bacaan_kedua 
+--------------
+   1000000.00
+(1 row)
+
+--- langkah 060 | Sesi A ---
+UPDATE lab9.rekening SET saldo = saldo - 1 WHERE rekening_id = 1;
+ERROR:  40001: could not serialize access due to concurrent update
+LOCATION:  ExecUpdate, nodeModifyTable.c:2415
+
+--- langkah 061 | Sesi A ---
+ROLLBACK;
+ROLLBACK
+
+--- langkah 062 | Sesi A ---
+SELECT saldo AS setelah_semua FROM lab9.rekening WHERE rekening_id = 1;
+ setelah_semua 
+---------------
+     700000.00
+(1 row)
+
+--- langkah 063 | Sesi A ---
+UPDATE lab9.rekening SET saldo = 1000000 WHERE rekening_id IN (1,2);
+UPDATE 2
+
+================================================================================
+ Q8 - Phantom read
+================================================================================
+
+--- langkah 064 | Sesi A ---
+DROP TABLE IF EXISTS lab9.rekening_uji;
+NOTICE:  00000: table "rekening_uji" does not exist, skipping
+LOCATION:  DropErrorMsgNonExistent, tablecmds.c:1436
+DROP TABLE
+
+--- langkah 065 | Sesi A ---
+CREATE TABLE lab9.rekening_uji (rekening_id INT PRIMARY KEY, pemilik TEXT NOT NULL, saldo NUMERIC(12,2) NOT NULL);
+CREATE TABLE
+
+--- langkah 066 | Sesi A ---
+INSERT INTO lab9.rekening_uji VALUES (1,'Ani',1000000),(2,'Budi',1000000),(3,'Citra',400000),(4,'Dedi',250000);
+INSERT 0 4
+
+--- langkah 067 | Sesi A ---
+BEGIN;
+BEGIN
+
+--- langkah 068 | Sesi A ---
+SELECT count(*) AS hitung_pertama_rc FROM lab9.rekening_uji WHERE saldo > 500000;
+ hitung_pertama_rc 
+-------------------
+                 2
+(1 row)
+
+--- langkah 069 | Sesi B ---
+INSERT INTO lab9.rekening_uji VALUES (5,'Eka',900000);
+INSERT 0 1
+
+--- langkah 070 | Sesi A ---
+SELECT count(*) AS hitung_kedua_rc FROM lab9.rekening_uji WHERE saldo > 500000;
+ hitung_kedua_rc 
+-----------------
+               3
+(1 row)
+
+--- langkah 071 | Sesi A ---
+COMMIT;
+COMMIT
+
+--- langkah 072 | Sesi A ---
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+
+--- langkah 073 | Sesi A ---
+SELECT count(*) AS hitung_pertama_rr FROM lab9.rekening_uji WHERE saldo > 500000;
+ hitung_pertama_rr 
+-------------------
+                 3
+(1 row)
+
+--- langkah 074 | Sesi B ---
+INSERT INTO lab9.rekening_uji VALUES (6,'Fajar',800000);
+INSERT 0 1
+
+--- langkah 075 | Sesi A ---
+SELECT count(*) AS hitung_kedua_rr FROM lab9.rekening_uji WHERE saldo > 500000;
+ hitung_kedua_rr 
+-----------------
+               3
+(1 row)
+
+--- langkah 076 | Sesi A ---
+COMMIT;
+COMMIT
+
+--- langkah 077 | Sesi A ---
+SELECT count(*) AS hitung_setelah_commit FROM lab9.rekening_uji WHERE saldo > 500000;
+ hitung_setelah_commit 
+-----------------------
+                     4
+(1 row)
+
+================================================================================
+ Q9 - Dirty read dan READ UNCOMMITTED
+================================================================================
+
+--- langkah 078 | Sesi A ---
+BEGIN;
+BEGIN
+
+--- langkah 079 | Sesi A ---
+UPDATE lab9.rekening SET saldo = 1 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 080 | Sesi A ---
+SELECT saldo AS yang_dilihat_a FROM lab9.rekening WHERE rekening_id = 1;
+ yang_dilihat_a 
+----------------
+           1.00
+(1 row)
+
+--- langkah 081 | Sesi B ---
+BEGIN TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+BEGIN
+
+--- langkah 082 | Sesi B ---
+SHOW transaction_isolation;
+ transaction_isolation 
+-----------------------
+ read uncommitted
+(1 row)
+
+--- langkah 083 | Sesi B ---
+SELECT saldo AS yang_dilihat_b FROM lab9.rekening WHERE rekening_id = 1;
+ yang_dilihat_b 
+----------------
+     1000000.00
+(1 row)
+
+--- langkah 084 | Sesi B ---
+COMMIT;
+COMMIT
+
+--- langkah 085 | Sesi A ---
+ROLLBACK;
+ROLLBACK
+
+--- langkah 086 | Sesi A ---
+SELECT saldo AS sesudah_rollback FROM lab9.rekening WHERE rekening_id = 1;
+ sesudah_rollback 
+------------------
+       1000000.00
+(1 row)
+
+================================================================================
+ Q10 - Lost update
+================================================================================
+
+--- langkah 087 | Sesi A ---
+BEGIN;
+BEGIN
+
+--- langkah 088 | Sesi A ---
+SELECT saldo AS dibaca_a FROM lab9.rekening WHERE rekening_id = 1;
+  dibaca_a  
+------------
+ 1000000.00
+(1 row)
+
+--- langkah 089 | Sesi B ---
+BEGIN;
+BEGIN
+
+--- langkah 090 | Sesi B ---
+SELECT saldo AS dibaca_b FROM lab9.rekening WHERE rekening_id = 1;
+  dibaca_b  
+------------
+ 1000000.00
+(1 row)
+
+--- langkah 091 | Sesi A ---
+UPDATE lab9.rekening SET saldo = 900000 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 092 | Sesi A ---
+COMMIT;
+COMMIT
+
+--- langkah 093 | Sesi B ---
+UPDATE lab9.rekening SET saldo = 950000 WHERE rekening_id = 1;
+UPDATE 1
+
+--- langkah 094 | Sesi B ---
+COMMIT;
+COMMIT
+
+--- langkah 095 | Sesi A ---
+SELECT saldo AS saldo_akhir FROM lab9.rekening WHERE rekening_id = 1;
+ saldo_akhir 
+-------------
+   950000.00
+(1 row)
+
+================================================================================
+ Pemulihan kondisi awal
+================================================================================
+
+--- langkah 096 | Sesi A ---
+UPDATE lab9.rekening SET saldo = 1000000 WHERE rekening_id IN (1,2);
+UPDATE 2
+
+--- langkah 097 | Sesi A ---
+DROP TABLE IF EXISTS lab9.rekening_uji;
+DROP TABLE
+
+--- langkah 098 | Sesi A ---
+SELECT rekening_id, pemilik, saldo FROM lab9.rekening ORDER BY rekening_id;
+ rekening_id | pemilik |   saldo    
+-------------+---------+------------
+           1 | Ani     | 1000000.00
+           2 | Budi    | 1000000.00
+(2 rows)
+
+--- langkah 099 | Sesi A ---
+SELECT sum(saldo) AS total_saldo FROM lab9.rekening;
+ total_saldo 
+-------------
+  2000000.00
+(1 row)
+
+================================================================================
+ Q11 - tabel ringkasan anomali: lihat laporan.md dan bukti/isolation-level.md
+ Q12-Q32 - diisi anggota Langkah 3-6
+================================================================================

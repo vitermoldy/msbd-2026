@@ -1,0 +1,60 @@
+Timing is on.
+SELECT s.relname AS tabel, s.indexrelname AS index, s.idx_scan, s.idx_tup_read, s.idx_tup_fetch,
+       pg_size_pretty(pg_relation_size(s.indexrelid)) AS ukuran,
+       pg_relation_size(s.indexrelid) AS byte
+FROM pg_stat_user_indexes s
+WHERE s.schemaname = 'lab6'
+ORDER BY s.idx_scan, pg_relation_size(s.indexrelid) DESC;
+      tabel       |        index        | idx_scan | idx_tup_read | idx_tup_fetch | ukuran  |   byte   
+------------------+---------------------+----------+--------------+---------------+---------+----------
+ event_log        | ev_salah_idx        |        0 |            0 |             0 | 60 MB   | 63012864
+ tulis_lima_index | tulis_ekspresi_idx  |        0 |            0 |             0 | 14 MB   | 14229504
+ tulis_lima_index | tulis_btree_idx     |        0 |            0 |             0 | 8312 kB |  8511488
+ tulis_lima_index | tulis_gin_idx       |        0 |            0 |             0 | 4808 kB |  4923392
+ hot_longgar      | hot_longgar_pkey    |        0 |            0 |             0 | 456 kB  |   466944
+ hot_penuh        | hot_penuh_pkey      |        0 |            0 |             0 | 456 kB  |   466944
+ tulis_lima_index | tulis_partial_idx   |        0 |            0 |             0 | 176 kB  |   180224
+ tulis_lima_index | tulis_brin_idx      |        0 |            0 |             0 | 24 kB   |    24576
+ event_log        | ev_email_lower_idx  |        1 |            1 |             0 | 86 MB   | 90390528
+ event_log        | ev_cover3_idx       |        1 |           40 |             0 | 77 MB   | 81133568
+ event_log        | ev_benar_idx        |        1 |           20 |            20 | 60 MB   | 63102976
+ event_log        | idx_btree_terjadi   |        1 |        46523 |         46523 | 43 MB   | 44949504
+ event_log        | ev_terjadi_pada_idx |        1 |        46523 |         46523 | 43 MB   | 44949504
+ event_log        | idx_status          |        1 |      2000000 |             0 | 13 MB   | 13918208
+ event_log        | idx_gin_payload     |        1 |        80000 |             0 | 7096 kB |  7266304
+ event_log        | ev_gagal_idx        |        1 |        40000 |         40000 | 896 kB  |   917504
+ event_log        | event_log_pkey      |        6 |      1200000 |       1200000 | 43 MB   | 44941312
+(17 rows)
+
+Time: 2.068 ms
+----- index yang belum pernah dipakai sama sekali
+SELECT s.indexrelname AS index, pg_size_pretty(pg_relation_size(s.indexrelid)) AS ukuran,
+       pg_get_indexdef(s.indexrelid) AS definisi,
+       i.indisunique AS menjaga_keunikan, i.indisprimary AS primary_key
+FROM pg_stat_user_indexes s JOIN pg_index i ON i.indexrelid = s.indexrelid
+WHERE s.schemaname='lab6' AND s.idx_scan = 0
+ORDER BY pg_relation_size(s.indexrelid) DESC;
+       index        | ukuran  |                                                        definisi                                                        | menjaga_keunikan | primary_key 
+--------------------+---------+------------------------------------------------------------------------------------------------------------------------+------------------+-------------
+ ev_salah_idx       | 60 MB   | CREATE INDEX ev_salah_idx ON lab6.event_log USING btree (terjadi_pada, customer_id)                                    | f                | f
+ tulis_ekspresi_idx | 14 MB   | CREATE INDEX tulis_ekspresi_idx ON lab6.tulis_lima_index USING btree (lower(email))                                    | f                | f
+ tulis_btree_idx    | 8312 kB | CREATE INDEX tulis_btree_idx ON lab6.tulis_lima_index USING btree (customer_id, terjadi_pada DESC)                     | f                | f
+ tulis_gin_idx      | 4808 kB | CREATE INDEX tulis_gin_idx ON lab6.tulis_lima_index USING gin (payload jsonb_path_ops)                                 | f                | f
+ hot_longgar_pkey   | 456 kB  | CREATE UNIQUE INDEX hot_longgar_pkey ON lab6.hot_longgar USING btree (id)                                              | t                | t
+ hot_penuh_pkey     | 456 kB  | CREATE UNIQUE INDEX hot_penuh_pkey ON lab6.hot_penuh USING btree (id)                                                  | t                | t
+ tulis_partial_idx  | 176 kB  | CREATE INDEX tulis_partial_idx ON lab6.tulis_lima_index USING btree (terjadi_pada DESC) WHERE (status = 'GAGAL'::text) | f                | f
+ tulis_brin_idx     | 24 kB   | CREATE INDEX tulis_brin_idx ON lab6.tulis_lima_index USING brin (terjadi_pada) WITH (pages_per_range='128')            | f                | f
+(8 rows)
+
+Time: 1.724 ms
+----- total ruang index pada skema lab6
+SELECT pg_size_pretty(sum(pg_relation_size(indexrelid))) AS total_index,
+       pg_size_pretty(sum(pg_relation_size(indexrelid)) FILTER (WHERE idx_scan=0)) AS index_tak_terpakai,
+       count(*) AS jumlah_index, count(*) FILTER (WHERE idx_scan=0) AS jumlah_tak_terpakai
+FROM pg_stat_user_indexes WHERE schemaname='lab6';
+ total_index | index_tak_terpakai | jumlah_index | jumlah_tak_terpakai 
+-------------+--------------------+--------------+---------------------
+ 461 MB      | 88 MB              |           17 |                   8
+(1 row)
+
+Time: 0.617 ms

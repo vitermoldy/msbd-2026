@@ -1,0 +1,68 @@
+Timing is on.
+----- bahan rekomendasi: ukuran, pemakaian, dan definisi
+SELECT s.indexrelname AS index, s.idx_scan,
+       pg_size_pretty(pg_relation_size(s.indexrelid)) AS ukuran,
+       round(100.0*pg_relation_size(s.indexrelid)/pg_relation_size('lab6.event_log'), 2) AS persen_heap,
+       pg_get_indexdef(s.indexrelid) AS definisi
+FROM pg_stat_user_indexes s
+WHERE s.schemaname='lab6' AND s.relname='event_log'
+ORDER BY pg_relation_size(s.indexrelid) DESC;
+        index        | idx_scan | ukuran  | persen_heap |                                                  definisi                                                  
+---------------------+----------+---------+-------------+------------------------------------------------------------------------------------------------------------
+ ev_email_lower_idx  |        1 | 86 MB   |       18.84 | CREATE INDEX ev_email_lower_idx ON lab6.event_log USING btree (lower(email))
+ ev_cover3_idx       |        1 | 77 MB   |       16.91 | CREATE INDEX ev_cover3_idx ON lab6.event_log USING btree (customer_id, terjadi_pada, jumlah)
+ ev_benar_idx        |        1 | 60 MB   |       13.15 | CREATE INDEX ev_benar_idx ON lab6.event_log USING btree (customer_id, terjadi_pada DESC)
+ ev_salah_idx        |        0 | 60 MB   |       13.13 | CREATE INDEX ev_salah_idx ON lab6.event_log USING btree (terjadi_pada, customer_id)
+ ev_terjadi_pada_idx |        1 | 43 MB   |        9.37 | CREATE INDEX ev_terjadi_pada_idx ON lab6.event_log USING btree (terjadi_pada DESC)
+ idx_btree_terjadi   |        1 | 43 MB   |        9.37 | CREATE INDEX idx_btree_terjadi ON lab6.event_log USING btree (terjadi_pada)
+ event_log_pkey      |        6 | 43 MB   |        9.37 | CREATE UNIQUE INDEX event_log_pkey ON lab6.event_log USING btree (event_id)
+ idx_status          |        1 | 13 MB   |        2.90 | CREATE INDEX idx_status ON lab6.event_log USING btree (status)
+ idx_gin_payload     |        1 | 7096 kB |        1.51 | CREATE INDEX idx_gin_payload ON lab6.event_log USING gin (payload jsonb_path_ops)
+ ev_gagal_idx        |        1 | 896 kB  |        0.19 | CREATE INDEX ev_gagal_idx ON lab6.event_log USING btree (terjadi_pada DESC) WHERE (status = 'GAGAL'::text)
+(10 rows)
+
+Time: 2.292 ms
+----- kandidat gabung: index yang kolom kuncinya menjadi awalan kolom kunci index lain
+WITH ix AS (
+  SELECT s.indexrelname, s.indexrelid, s.idx_scan, i.indnkeyatts, c.relam,
+         string_to_array(i.indkey::text, ' ') AS kunci, i.indpred
+  FROM pg_stat_user_indexes s
+  JOIN pg_index i ON i.indexrelid = s.indexrelid
+  JOIN pg_class c ON c.oid = s.indexrelid
+  WHERE s.schemaname='lab6' AND s.relname='event_log'
+)
+SELECT a.indexrelname AS index_sempit, a.idx_scan AS scan_sempit,
+       pg_size_pretty(pg_relation_size(a.indexrelid)) AS ukuran_sempit,
+       b.indexrelname AS index_lebar,  b.idx_scan AS scan_lebar,
+       pg_size_pretty(pg_relation_size(b.indexrelid)) AS ukuran_lebar,
+       pg_get_indexdef(a.indexrelid) AS definisi_sempit,
+       pg_get_indexdef(b.indexrelid) AS definisi_lebar
+FROM ix a JOIN ix b
+  ON a.indexrelid <> b.indexrelid
+ AND a.relam = b.relam
+ AND a.indnkeyatts <= b.indnkeyatts
+ AND a.kunci[1:a.indnkeyatts] = b.kunci[1:a.indnkeyatts]
+WHERE a.indpred IS NULL AND b.indpred IS NULL
+  AND NOT ('0' = ANY(a.kunci[1:a.indnkeyatts]))   -- lewati index ekspresi
+ORDER BY 1, 4;
+    index_sempit     | scan_sempit | ukuran_sempit |     index_lebar     | scan_lebar | ukuran_lebar |                                     definisi_sempit                                      |                                        definisi_lebar                                        
+---------------------+-------------+---------------+---------------------+------------+--------------+------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------
+ ev_benar_idx        |           1 | 60 MB         | ev_cover3_idx       |          1 | 77 MB        | CREATE INDEX ev_benar_idx ON lab6.event_log USING btree (customer_id, terjadi_pada DESC) | CREATE INDEX ev_cover3_idx ON lab6.event_log USING btree (customer_id, terjadi_pada, jumlah)
+ ev_terjadi_pada_idx |           1 | 43 MB         | ev_salah_idx        |          0 | 60 MB        | CREATE INDEX ev_terjadi_pada_idx ON lab6.event_log USING btree (terjadi_pada DESC)       | CREATE INDEX ev_salah_idx ON lab6.event_log USING btree (terjadi_pada, customer_id)
+ ev_terjadi_pada_idx |           1 | 43 MB         | idx_btree_terjadi   |          1 | 43 MB        | CREATE INDEX ev_terjadi_pada_idx ON lab6.event_log USING btree (terjadi_pada DESC)       | CREATE INDEX idx_btree_terjadi ON lab6.event_log USING btree (terjadi_pada)
+ idx_btree_terjadi   |           1 | 43 MB         | ev_salah_idx        |          0 | 60 MB        | CREATE INDEX idx_btree_terjadi ON lab6.event_log USING btree (terjadi_pada)              | CREATE INDEX ev_salah_idx ON lab6.event_log USING btree (terjadi_pada, customer_id)
+ idx_btree_terjadi   |           1 | 43 MB         | ev_terjadi_pada_idx |          1 | 43 MB        | CREATE INDEX idx_btree_terjadi ON lab6.event_log USING btree (terjadi_pada)              | CREATE INDEX ev_terjadi_pada_idx ON lab6.event_log USING btree (terjadi_pada DESC)
+(5 rows)
+
+Time: 2.768 ms
+----- harga tulis dan ruang, sebagai dasar keputusan
+SELECT pg_size_pretty(pg_relation_size('lab6.event_log')) AS heap,
+       pg_size_pretty(pg_indexes_size('lab6.event_log'))  AS semua_index,
+       round(100.0*pg_indexes_size('lab6.event_log')/pg_relation_size('lab6.event_log'), 1) AS persen_index_atas_heap,
+       pg_size_pretty(pg_total_relation_size('lab6.event_log')) AS total;
+  heap  | semua_index | persen_index_atas_heap | total  
+--------+-------------+------------------------+--------
+ 458 MB | 434 MB      |                   94.7 | 891 MB
+(1 row)
+
+Time: 0.392 ms

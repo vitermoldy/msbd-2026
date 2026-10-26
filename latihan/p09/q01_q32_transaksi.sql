@@ -334,7 +334,6 @@ VACUUM VERBOSE lab9.rekening;
 
 -- ---------------------------------------------------------------------
 -- Q24. SKIP LOCKED
--- Mengabaikan baris yang sedang dikunci sesi lain.
 -- ---------------------------------------------------------------------
 
 -- [A] Persiapan tabel antrean pekerjaan.
@@ -353,10 +352,6 @@ VALUES
     (2, 'PENDING'),
     (3, 'PENDING');
 
-
--- [A] Sesi A: kunci baris pertama.
--- Jalankan di Sesi A dan biarkan transaksi tetap terbuka.
-
 BEGIN;
 
 SELECT *
@@ -364,21 +359,12 @@ FROM lab9.antrean_pekerjaan
 WHERE job_id = 1
 FOR UPDATE;
 
-
--- [B] Sesi B: jalankan setelah Sesi A berhasil mengunci baris.
--- Baris job_id = 1 dilewati tanpa menunggu.
-
 BEGIN;
 
 SELECT *
 FROM lab9.antrean_pekerjaan
 WHERE status = 'PENDING'
 FOR UPDATE SKIP LOCKED;
-
--- Hasil yang diharapkan:
--- job_id = 2, status = PENDING
--- job_id = 3, status = PENDING
-
 
 -- [A] Sesi A: akhiri transaksi.
 
@@ -392,7 +378,6 @@ ROLLBACK;
 
 -- ---------------------------------------------------------------------
 -- Q25. NOWAIT
--- Gagal seketika jika baris tidak dapat dikunci.
 -- ---------------------------------------------------------------------
 
 -- [A] Sesi A: kunci job_id = 2.
@@ -416,15 +401,9 @@ FROM lab9.antrean_pekerjaan
 WHERE job_id = 2
 FOR UPDATE NOWAIT;
 
--- Hasil yang diharapkan:
--- ERROR: could not obtain lock on row
--- SQLSTATE: 55P03
-
-
 -- [B] Sesi B: jalankan setelah query di atas gagal.
 
 ROLLBACK;
-
 
 -- [A] Sesi A: akhiri transaksi.
 
@@ -433,7 +412,6 @@ ROLLBACK;
 
 -- ---------------------------------------------------------------------
 -- Q26. WRITE SKEW DENGAN REPEATABLE READ
--- Kedua transaksi dapat COMMIT dan melanggar aturan bisnis.
 -- ---------------------------------------------------------------------
 
 -- [A] Persiapan tabel dokter jaga.
@@ -492,21 +470,12 @@ SET is_aktif = FALSE
 WHERE dokter_id = 2;
 
 -- Hasil yang diharapkan: UPDATE 1
-
-
 -- [A] Sesi A: COMMIT.
 
 COMMIT;
-
-
 -- [B] Sesi B: COMMIT.
 
 COMMIT;
-
--- Hasil yang diharapkan:
--- Kedua transaksi berhasil COMMIT.
-
-
 -- [A] Verifikasi hasil Q26.
 -- Jalankan setelah kedua transaksi selesai.
 
@@ -517,10 +486,6 @@ ORDER BY dokter_id;
 SELECT COUNT(*) AS jumlah_dokter_aktif
 FROM lab9.dokter_jaga
 WHERE is_aktif = TRUE;
-
--- Hasil yang diharapkan:
--- jumlah_dokter_aktif = 0
--- Aturan bisnis minimal satu dokter aktif dilanggar.
 
 
 -- ---------------------------------------------------------------------
@@ -543,7 +508,6 @@ SELECT *
 FROM lab9.dokter_jaga
 ORDER BY dokter_id;
 
-
 -- [A] Sesi A: baca jumlah dokter aktif.
 
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -551,9 +515,6 @@ BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SELECT COUNT(*)
 FROM lab9.dokter_jaga
 WHERE is_aktif = TRUE;
-
--- Hasil yang diharapkan: 2
-
 
 -- [B] Sesi B: jalankan sebelum Sesi A melakukan UPDATE.
 
@@ -563,17 +524,11 @@ SELECT COUNT(*)
 FROM lab9.dokter_jaga
 WHERE is_aktif = TRUE;
 
--- Hasil yang diharapkan: 2
-
-
 -- [A] Sesi A: nonaktifkan Andi.
 
 UPDATE lab9.dokter_jaga
 SET is_aktif = FALSE
 WHERE dokter_id = 1;
-
--- Hasil yang diharapkan: UPDATE 1
-
 
 -- [B] Sesi B: nonaktifkan Budi.
 
@@ -581,17 +536,13 @@ UPDATE lab9.dokter_jaga
 SET is_aktif = FALSE
 WHERE dokter_id = 2;
 
--- Hasil yang diharapkan: UPDATE 1
-
-
 -- [A] Sesi A: COMMIT.
 
 COMMIT;
 
 
 -- [B] Sesi B: COMMIT.
--- Pada skenario yang menghasilkan konflik serialisasi,
--- COMMIT ini akan gagal dengan SQLSTATE 40001.
+-- Pada skenario yang menghasilkan konflik serialisasi, COMMIT ini akan gagal dengan SQLSTATE 40001.
 
 COMMIT;
 

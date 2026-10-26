@@ -11,7 +11,7 @@ latihan pertemuan lain (`lab5`, `lab6`) tidak dibuat, diubah, maupun dihapus.
 |---|---|---|---|
 | Langkah 1 | Q1–Q5 | Viter | selesai |
 | Langkah 2 | Q6–Q11 | Viter | selesai |
-| Langkah 3 | Q12–Q17 | «isi nama» | belum |
+| Langkah 3 | Q12–Q17 | Finsus | belum |
 | Langkah 4 | Q18–Q23 | «isi nama» | belum |
 | Langkah 5 | Q24–Q29 | «isi nama» | belum |
 | Langkah 6 | Q30–Q32 | «isi nama» | belum |
@@ -462,7 +462,123 @@ disandarkan pada bukti:»
 | Anggota | Bagian | Pemakaian AI | Cara verifikasi |
 |---|---|---|---|
 | Viter | Langkah 1 (Q1–Q5), Langkah 2 (Q6–Q11), `q00_setup.sql`, `README.md`, kerangka laporan | Claude (Opus 5) dipakai untuk menyusun urutan perintah dua sesi, merapikan skrip SQL, dan menulis draf penjelasan | Seluruh perintah Q1–Q11 dijalankan sendiri pada dua jendela `psql` di kontainer `msbd-pg`; setiap angka pada tabel urutan, pesan galat, dan SQLSTATE dicocokkan dengan keluaran psql yang tersimpan di `bukti/hasil-sesi.txt`. Perilaku `READ UNCOMMITTED` dan `40001` diperiksa ulang terhadap dokumentasi resmi PostgreSQL bab *Transaction Isolation* |
-| «nama» | Langkah 3 | «isi sendiri» | «isi sendiri» |
+
+
+# Langkah 3 · Q12–Q17: Mencegah Lost Update dan Memahami MVCC
+
+Bukti urutan lengkap kedua sesi untuk Langkah 3 ada di
+[`bukti/isolation-level.md`](bukti/isolation-level.md), dan keluaran psql mentahnya di
+[`bukti/hasil-sesi.txt`](bukti/hasil-sesi.txt).
+
+## Q12. Memperbaiki lost update dengan pembaruan atomik
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|---|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | B | `BEGIN;` | `BEGIN` |
+| 3 | A | `UPDATE lab9.rekening SET saldo = saldo - 100000 WHERE rekening_id = 1 AND saldo >= 100000;` | `UPDATE 1` |
+| 4 | B | `UPDATE lab9.rekening SET saldo = saldo - 50000 WHERE rekening_id = 1 AND saldo >= 50000;` | *(Menunggu Sesi A)* |
+| 5 | A | `COMMIT;` | `COMMIT` |
+| 6 | B | *(Melanjutkan eksekusi)* | `UPDATE 1` |
+| 7 | B | `COMMIT;` | `COMMIT` |
+| 8 | A | `SELECT saldo FROM lab9.rekening WHERE rekening_id = 1;` | **850000.00** |
+
+**Menghitung di basis data jauh lebih aman daripada menulis nilai hasil hitung aplikasi.**
+Pada Q10, aplikasi membaca data lalu menghitung nilai tetap di memori lokal, sehingga nilai yang
+ditulis bersifat absolut dan mengabaikan mutasi yang terjadi di antara waktu baca dan tulis. 
+Sebaliknya, ekspresi `SET saldo = saldo - 100000` adalah operasi atomik di dalam PostgreSQL.
+Ketika Sesi A memegang *exclusive row lock*, Sesi B tertahan di langkah 4. Begitu Sesi A commit,
+PostgreSQL membaca versi baris yang paling baru (*latest committed row version*) sebelum
+menjalankan pengurangan milik Sesi B. Hasilnya adalah 850.000 — kedua pengurangan diakomodasi
+penuh tanpa data yang hilang.
+
+## Q13. Pessimistic Locking dengan SELECT ... FOR UPDATE
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|---|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `SELECT saldo ... WHERE rekening_id = 1 FOR UPDATE;` | **1000000.00** |
+| 3 | B | `BEGIN;` | `BEGIN` |
+| 4 | B | `SELECT saldo ... WHERE rekening_id = 1 FOR UPDATE;` | *(Menunggu Sesi A)* |
+| 5 | A | `UPDATE ... SET saldo = 900000 WHERE rekening_id = 1;` | `UPDATE 1` |
+| 6 | A | `COMMIT;` | `COMMIT` |
+| 7 | B | *(Lock terlepas, query selesai)* | **900000.00** |
+| 8 | B | `UPDATE ... SET saldo = 850000 WHERE rekening_id = 1;` | `UPDATE 1` |
+| 9 | B | `COMMIT;` | `COMMIT` |
+
+**Sesi B menunggu pada langkah 4**, tepat saat ia mencoba mengunci baris yang sedang dikunci
+eksklusif oleh transaksi Sesi A. Begitu Sesi A melakukan `COMMIT` pada langkah 6, antrean lock
+terlepas dan Sesi B langsung disajikan nilai baris terbaru (900.000, bukan 1.000.000).
+Dengan mengunci baris di awal pembacaan, aplikasi menjamin tidak ada transaksi lain yang dapat
+mengubah baris tersebut selama proses kalkulasi berlangsung. Pola ini merupakan pendekatan
+*pessimistic locking*, sangat cocok bila kalkulasi aplikasi memerlukan proses bisnis yang rumit
+di memori aplikasi sebelum nilai akhir ditulis kembali ke database.
+
+## Q14. Optimistic Locking menggunakan kolom version_no
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|---|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `SELECT saldo, version_no ... WHERE rekening_id = 1;` | `1000000.00`, ver `1` |
+| 3 | B | `BEGIN;` | `BEGIN` |
+| 4 | B | `SELECT saldo, version_no ... WHERE rekening_id = 1;` | `1000000.00`, ver `1` |
+| 5 | A | `UPDATE ... saldo = 900000, version_no = 2 WHERE ... version_no = 1;` | `UPDATE 1` |
+| 6 | A | `COMMIT;` | `COMMIT` |
+| 7 | B | `UPDATE ... saldo = 950000, version_no = 2 WHERE ... version_no = 1;` | **`UPDATE 0`** |
+| 8 | B | `COMMIT;` | `COMMIT` |
+
+**Aplikasi mendeteksi perubahan data melalui jumlah baris yang terpengaruh (affected rows).**
+Ketika transaksi B mencoba mengeksekusi `UPDATE` dengan kriteria `version_no = 1`, baris tersebut
+sudah tidak memenuhi syarat karena Sesi A telah menaikkan versinya menjadi 2. PostgreSQL
+mengembalikan status `UPDATE 0`. Driver/aplikasi mendeteksi angka 0 ini sebagai sinyal bahwa data
+telah dimodifikasi oleh transaksi paralel, sehingga aplikasi dapat menolak operasi secara elegan
+atau memicu retry tanpa menimbulkan tabrakan lock fisik di level basis data.
+
+## Q15. Snapshot MVCC: Pembaca tidak menunggu penulis
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|---|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `UPDATE lab9.rekening SET saldo = 500000 WHERE rekening_id = 1;` | `UPDATE 1` (uncommitted) |
+| 3 | B | `SELECT saldo FROM lab9.rekening WHERE rekening_id = 1;` | **1000000.00** |
+| 4 | B | `SELECT pg_blocking_pids(pg_backend_pid());` | `{}` (Kosong) |
+| 5 | A | `ROLLBACK;` | `ROLLBACK` |
+
+Secara konseptual, **MVCC (*Multi-Version Concurrency Control*) membuat snapshot berbasis versi
+baris tuple**. Saat baris di-update oleh Sesi A, PostgreSQL tidak menimpa data di tempat (*in-place
+overwrite*), melainkan menyisipkan versi baris baru (*tuple version*) sambil tetap mempertahankan
+versi baris yang lama. Operasi `SELECT` biasa pada Sesi B hanya membaca versi baris yang sudah
+di-commit dan sesuai dengan snapshot transaksinya. Karena keduanya mengakses tuple yang secara
+fisik berbeda di dalam heap block, pembaca tidak pernah memblokir penulis, dan penulis tidak
+pernah memblokir pembaca.
+
+## Q16. Analisis metadata transaksi internal xmin dan xmax
+
+Nilai `xmin` dan `xmax` adalah nomor ID transaksi internal PostgreSQL (XID) yang disematkan pada
+setiap baris heap tuple:
+* **`xmin`**: ID transaksi yang menyisipkan (*insert*) versi baris tersebut.
+* **`xmax`**: ID transaksi yang memperbarui (*update*) atau menghapus (*delete*) baris tersebut.
+  Jika baris masih aktif dan belum diubah, `xmax` bernilai 0.
+
+**Mengapa satu nilai saja tidak cukup untuk mendiagnosis status visibilitas?**
+Saat sebuah transaksi memodifikasi baris lalu mengalami `ROLLBACK`, nilai `xmax` pada baris lama
+tetap mencatat XID dari transaksi yang gagal tersebut (misal `xmax = 751`). Nilai 751 itu tidak
+langsung dihapus secara fisik saat rollback. PostgreSQL wajib memeriksa status XID tersebut ke
+dalam **Commit Log (CLOG / `pg_xact`)** untuk memastikan apakah transaksi pembuat/penghapus itu
+berstatus *COMMITTED*, *ABORTED*, atau *IN-PROGRESS*. Visibilitas baris adalah perpaduan antara
+nilai metadata di tuple (`xmin`/`xmax`) dan status global transaksi di CLOG.
+
+## Q17. Manfaat MVCC dan urgensi pemeliharaan VACUUM
+
+* **Manfaat Utama MVCC**: Menyediakan skalabilitas konkurensi tingkat tinggi. Beban query pembacaan
+  laporan/analitik (*read workload*) tidak akan memperlambat atau mengunci proses transaksi tulis
+  (*write transactions*), sehingga throughput basis data tetap tinggi tanpa mengorbankan isolasi data.
+* **Mengapa VACUUM Sangat Diperlukan?**: Karena pembaruan data pada MVCC dilakukan dengan membuat
+  tuple baru, versi baris yang lama berubah status menjadi **dead tuple** setelah transaksi yang
+  mengaksesnya selesai. Dead tuple ini menumpuk ruang penyimpanan (*table bloat*) dan memperlambat
+  proses *sequential scan*. Proses `VACUUM` bertugas memindai halaman heap, membebaskan ruang yang
+  ditempati oleh dead tuple agar dapat dipakai kembali (*reused*) oleh tuple baru, serta mencegah
+  masalah kritis *transaction ID wraparound*.
 | «nama» | Langkah 4 | «isi sendiri» | «isi sendiri» |
 | «nama» | Langkah 5 | «isi sendiri» | «isi sendiri» |
 | «nama» | Langkah 6 | «isi sendiri» | «isi sendiri» |

@@ -217,7 +217,114 @@ SELECT rekening_id, pemilik, saldo FROM lab9.rekening ORDER BY rekening_id;
 
 
 -- =====================================================================
--- LANGKAH 3 · Q12-Q17 -- diisi anggota berikutnya
+-- LANGKAH 3 · Q12-Q17 · Mencegah Lost Update dan Memahami MVCC
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Q12. Perbaiki lost update menggunakan pembaruan atomik (in-database update)
+-- ---------------------------------------------------------------------
+-- [A]
+BEGIN;
+-- [B]
+BEGIN;
+-- [A] Penarikan 100.000 secara atomik di basis data
+UPDATE lab9.rekening SET saldo = saldo - 100000 WHERE rekening_id = 1 AND saldo >= 100000;
+-- [B] Penarikan 50.000 secara atomik: Sesi B MENUNGGU Sesi A selesai
+UPDATE lab9.rekening SET saldo = saldo - 50000 WHERE rekening_id = 1 AND saldo >= 50000;
+-- [A]
+COMMIT;
+-- [B] Sesi B otomatis lanjut sesudah commit A, mengevaluasi saldo terkini (900000)
+COMMIT;
+-- [A] Saldo akhir benar 850.000 (kedua penarikan berhasil tanpa lost update)
+SELECT rekening_id, saldo FROM lab9.rekening WHERE rekening_id = 1;
+
+-- [A] Kembalikan saldo awal
+UPDATE lab9.rekening SET saldo = 1000000 WHERE rekening_id = 1;
+
+-- ---------------------------------------------------------------------
+-- Q13. Ulangi skenario menggunakan SELECT ... FOR UPDATE (pessimistic lock)
+-- ---------------------------------------------------------------------
+-- [A]
+BEGIN;
+SELECT saldo FROM lab9.rekening WHERE rekening_id = 1 FOR UPDATE;
+-- [B]
+BEGIN;
+-- [B] Sesi B tertahan (MENUNGGU lock baris dilepas oleh Sesi A)
+SELECT saldo FROM lab9.rekening WHERE rekening_id = 1 FOR UPDATE;
+-- [A] Sesi A melakukan mutasi dan commit
+UPDATE lab9.rekening SET saldo = 900000 WHERE rekening_id = 1;
+COMMIT;
+-- [B] Sesi B baru terlepas dan melihat saldo 900000 yang mutakhir
+UPDATE lab9.rekening SET saldo = 850000 WHERE rekening_id = 1;
+COMMIT;
+-- [A]
+SELECT rekening_id, saldo FROM lab9.rekening WHERE rekening_id = 1;
+
+-- [A] Kembalikan saldo awal
+UPDATE lab9.rekening SET saldo = 1000000 WHERE rekening_id = 1;
+
+-- ---------------------------------------------------------------------
+-- Q14. Kolom versi (optimistic locking) atau saldo lama sebagai kondisi WHERE
+-- ---------------------------------------------------------------------
+-- [A] Tambah kolom versi
+ALTER TABLE lab9.rekening ADD COLUMN IF NOT EXISTS version_no INT DEFAULT 1;
+UPDATE lab9.rekening SET version_no = 1, saldo = 1000000 WHERE rekening_id = 1;
+
+-- [A] Aplikasi A membaca saldo dan versi
+BEGIN;
+SELECT saldo, version_no FROM lab9.rekening WHERE rekening_id = 1;
+-- [B] Aplikasi B membaca saldo dan versi yang sama
+BEGIN;
+SELECT saldo, version_no FROM lab9.rekening WHERE rekening_id = 1;
+
+-- [A] Aplikasi A commit duluan, menaikkan version_no
+UPDATE lab9.rekening SET saldo = 900000, version_no = version_no + 1 WHERE rekening_id = 1 AND version_no = 1;
+COMMIT;
+
+-- [B] Aplikasi B mencoba menulis dengan modal version_no = 1
+UPDATE lab9.rekening SET saldo = 950000, version_no = version_no + 1 WHERE rekening_id = 1 AND version_no = 1;
+-- [B] Output: UPDATE 0 (Aplikasi mengetahui data berubah karena baris terdampak = 0)
+COMMIT;
+
+-- [A] Bersihkan kolom versi dan reset saldo
+ALTER TABLE lab9.rekening DROP COLUMN IF EXISTS version_no;
+UPDATE lab9.rekening SET saldo = 1000000 WHERE rekening_id = 1;
+
+-- ---------------------------------------------------------------------
+-- Q15. Dua SELECT biasa di tengah transaksi berbeda (Non-blocking MVCC)
+-- ---------------------------------------------------------------------
+-- [A]
+BEGIN;
+UPDATE lab9.rekening SET saldo = 500000 WHERE rekening_id = 1;
+-- [B] Pembacaan tanpa FOR UPDATE langsung keluar seketika (tanpa menunggu Sesi A)
+SELECT saldo FROM lab9.rekening WHERE rekening_id = 1;
+-- [B] Bukti bahwa Sesi B tidak diblokir
+SELECT pg_blocking_pids(pg_backend_pid()) AS antrean;
+-- [A]
+ROLLBACK;
+
+-- ---------------------------------------------------------------------
+-- Q16. Membaca metadata transaksi internal xmin dan xmax
+-- ---------------------------------------------------------------------
+-- [A]
+SELECT ctid, xmin, xmax, rekening_id, saldo FROM lab9.rekening WHERE rekening_id = 1;
+-- [A]
+BEGIN;
+UPDATE lab9.rekening SET saldo = 888000 WHERE rekening_id = 1;
+SELECT ctid, xmin, xmax, rekening_id, saldo FROM lab9.rekening WHERE rekening_id = 1;
+ROLLBACK;
+-- [A] Nilai xmax tetap terisi pointer transaksi batal (bukti satu nilai tak cukup)
+SELECT ctid, xmin, xmax, rekening_id, saldo FROM lab9.rekening WHERE rekening_id = 1;
+
+-- ---------------------------------------------------------------------
+-- Q17. Manfaat MVCC dan kebutuhan VACUUM
+-- ---------------------------------------------------------------------
+-- [A] Cek dead tuples akibat update berkali-kali
+SELECT relname, n_live_tup, n_dead_tup, last_vacuum, last_autovacuum
+FROM pg_stat_user_tables
+WHERE relname = 'rekening';
+-- [A] Bersihkan baris mati/kedaluwarsa
+VACUUM VERBOSE lab9.rekening;
 -- LANGKAH 4 · Q18-Q23 -- diisi anggota berikutnya
 -- LANGKAH 5 · Q24-Q29 -- diisi anggota berikutnya
 -- LANGKAH 6 · Q30-Q32 -- diisi anggota berikutnya

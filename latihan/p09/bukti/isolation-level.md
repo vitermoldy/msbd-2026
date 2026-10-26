@@ -169,3 +169,88 @@ Satu pola yang terlihat dari tabel ini: menaikkan isolation level menutup anomal
 menulis nilai tetap hasil hitungan sendiri. Yang berubah hanyalah cara kegagalannya muncul —
 pada `READ COMMITTED` ia diam-diam menimpa, sedangkan pada `REPEATABLE READ` ia berubah menjadi
 galat `40001` yang setidaknya **bisa dideteksi dan diulang**.
+
+
+---
+
+## Q12 · Memperbaiki Lost Update dengan Pembaruan Atomik
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|---|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | B | `BEGIN;` | `BEGIN` |
+| 3 | A | `UPDATE lab9.rekening SET saldo = saldo - 100000 WHERE rekening_id = 1 AND saldo >= 100000;` | `UPDATE 1` |
+| 4 | B | `UPDATE lab9.rekening SET saldo = saldo - 50000 WHERE rekening_id = 1 AND saldo >= 50000;` | *(Menunggu Sesi A)* |
+| 5 | A | `COMMIT;` | `COMMIT` |
+| 6 | B | *(Sesi B otomatis terlepas dari antrean)* | `UPDATE 1` |
+| 7 | B | `COMMIT;` | `COMMIT` |
+| 8 | A | `SELECT saldo FROM lab9.rekening WHERE rekening_id = 1;` | **850000.00** |
+
+**Hasil.** Kedua penarikan berhasil diperhitungkan: $1.000.000 - 100.000 - 50.000 = 850.000$. Tidak ada pembaruan yang hilang (*lost update* tertutup).
+
+**Sebab.** Pada pembaruan atomik (`SET saldo = saldo - x`), evaluasi dilakukan langsung di dalam PostgreSQL saat operasi dijalankan. Ketika Sesi A mengubah baris, baris tersebut dikunci dengan *exclusive row lock*. Sesi B menunggu hingga kunci dilepas pada langkah 5. Saat giliran Sesi B tiba, PostgreSQL membaca versi baris hasil commit Sesi A (900.000) lalu mengurangi 50.000.
+
+---
+
+## Q13 · Mencegah Lost Update dengan SELECT ... FOR UPDATE
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|---|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `SELECT saldo FROM lab9.rekening WHERE rekening_id = 1 FOR UPDATE;` | **1000000.00** |
+| 3 | B | `BEGIN;` | `BEGIN` |
+| 4 | B | `SELECT saldo FROM lab9.rekening WHERE rekening_id = 1 FOR UPDATE;` | *(Menunggu Sesi A)* |
+| 5 | A | `UPDATE lab9.rekening SET saldo = 900000 WHERE rekening_id = 1;` | `UPDATE 1` |
+| 6 | A | `COMMIT;` | `COMMIT` |
+| 7 | B | *(Sesi B terlepas dari penantian)* | **900000.00** |
+| 8 | B | `UPDATE lab9.rekening SET saldo = 850000 WHERE rekening_id = 1;` | `UPDATE 1` |
+| 9 | B | `COMMIT;` | `COMMIT` |
+| 10 | A | `SELECT saldo FROM lab9.rekening WHERE rekening_id = 1;` | **850000.00** |
+
+**Hasil.** Sesi B tertahan di langkah 4 sejak perintah `SELECT ... FOR UPDATE` dijalankan. Begitu Sesi A melakukan `COMMIT` di langkah 6, Sesi B langsung memperoleh baris dengan nilai terbaru (900.000), sehingga hitungan aplikasi berikutnya menjadi konsisten (850.000).
+
+---
+
+## Q14 · Optimistic Locking dengan Kolom Versi
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|---|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `SELECT saldo, version_no FROM lab9.rekening WHERE rekening_id = 1;` | `1000000.00`, `1` |
+| 3 | B | `BEGIN;` | `BEGIN` |
+| 4 | B | `SELECT saldo, version_no FROM lab9.rekening WHERE rekening_id = 1;` | `1000000.00`, `1` |
+| 5 | A | `UPDATE lab9.rekening SET saldo = 900000, version_no = version_no + 1 WHERE rekening_id = 1 AND version_no = 1;` | `UPDATE 1` |
+| 6 | A | `COMMIT;` | `COMMIT` |
+| 7 | B | `UPDATE lab9.rekening SET saldo = 950000, version_no = version_no + 1 WHERE rekening_id = 1 AND version_no = 1;` | **`UPDATE 0`** |
+| 8 | B | `COMMIT;` | `COMMIT` |
+
+**Hasil.** Sesi B tidak menimpa pekerjaan Sesi A; perintahnya mengembalikan `UPDATE 0` karena `version_no` sudah berubah menjadi 2 oleh Sesi A. Aplikasi B mendeteksi bahwa modifikasi gagal dan dapat memicu alur *retry*.
+
+---
+
+## Q15 · Non-blocking Read pada Snapshot MVCC
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|---|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `UPDATE lab9.rekening SET saldo = 500000 WHERE rekening_id = 1;` | `UPDATE 1` (uncommitted) |
+| 3 | B | `SELECT saldo FROM lab9.rekening WHERE rekening_id = 1;` | **1000000.00** (Langsung kembali) |
+| 4 | B | `SELECT pg_blocking_pids(pg_backend_pid());` | `{}` (Kosong) |
+| 5 | A | `ROLLBACK;` | `ROLLBACK` |
+
+**Hasil.** Pembaca tidak diblokir oleh penulis (*readers never block writers, writers never block readers*). Sesi B langsung memperoleh snapshot baris yang valid tanpa perlu menunggu transaksi Sesi A selesai.
+
+---
+
+## Q16 · Metadata Transaksi: xmin dan xmax
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|---|---|---|
+| 1 | A | `SELECT ctid, xmin, xmax, saldo FROM lab9.rekening WHERE rekening_id = 1;` | `(0,1)`, misal xmin `750`, xmax `0` |
+| 2 | A | `BEGIN;` | `BEGIN` |
+| 3 | A | `UPDATE lab9.rekening SET saldo = 888000 WHERE rekening_id = 1;` | `UPDATE 1` |
+| 4 | A | `SELECT ctid, xmin, xmax, saldo FROM lab9.rekening WHERE rekening_id = 1;` | `(0,2)`, xmin `751`, xmax `0` |
+| 5 | A | `ROLLBACK;` | `ROLLBACK` |
+| 6 | A | `SELECT ctid, xmin, xmax, saldo FROM lab9.rekening WHERE rekening_id = 1;` | `(0,1)`, xmin `750`, xmax `751` |
+
+**Hasil.** Nilai `xmax` mencatat ID transaksi yang memodifikasi/menghapus baris. Pada langkah 6, `xmax` bernilai `751` meski transaksi di-rollback. Ini membuktikan bahwa status validitas baris tidak bisa ditentukan dari kolom `xmax` saja, melainkan wajib dicocokkan dengan status commit di *Commit Log* (CLOG / `pg_xact`).

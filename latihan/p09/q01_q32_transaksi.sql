@@ -325,7 +325,301 @@ FROM pg_stat_user_tables
 WHERE relname = 'rekening';
 -- [A] Bersihkan baris mati/kedaluwarsa
 VACUUM VERBOSE lab9.rekening;
+
 -- LANGKAH 4 · Q18-Q23 -- diisi anggota berikutnya
--- LANGKAH 5 · Q24-Q29 -- diisi anggota berikutnya
+
+-- =====================================================================
+-- LANGKAH 5 · Q24-Q29 · SKIP LOCKED dan SERIALIZABLE (dua sesi)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Q24. SKIP LOCKED
+-- Mengabaikan baris yang sedang dikunci sesi lain.
+-- ---------------------------------------------------------------------
+
+-- [A] Persiapan tabel antrean pekerjaan.
+-- Jalankan sekali sebelum memulai pengujian.
+
+DROP TABLE IF EXISTS lab9.antrean_pekerjaan;
+
+CREATE TABLE lab9.antrean_pekerjaan (
+    job_id SERIAL PRIMARY KEY,
+    status TEXT NOT NULL
+);
+
+INSERT INTO lab9.antrean_pekerjaan (job_id, status)
+VALUES
+    (1, 'PENDING'),
+    (2, 'PENDING'),
+    (3, 'PENDING');
+
+
+-- [A] Sesi A: kunci baris pertama.
+-- Jalankan di Sesi A dan biarkan transaksi tetap terbuka.
+
+BEGIN;
+
+SELECT *
+FROM lab9.antrean_pekerjaan
+WHERE job_id = 1
+FOR UPDATE;
+
+
+-- [B] Sesi B: jalankan setelah Sesi A berhasil mengunci baris.
+-- Baris job_id = 1 dilewati tanpa menunggu.
+
+BEGIN;
+
+SELECT *
+FROM lab9.antrean_pekerjaan
+WHERE status = 'PENDING'
+FOR UPDATE SKIP LOCKED;
+
+-- Hasil yang diharapkan:
+-- job_id = 2, status = PENDING
+-- job_id = 3, status = PENDING
+
+
+-- [A] Sesi A: akhiri transaksi.
+
+ROLLBACK;
+
+
+-- [B] Sesi B: akhiri transaksi.
+
+ROLLBACK;
+
+
+-- ---------------------------------------------------------------------
+-- Q25. NOWAIT
+-- Gagal seketika jika baris tidak dapat dikunci.
+-- ---------------------------------------------------------------------
+
+-- [A] Sesi A: kunci job_id = 2.
+-- Biarkan transaksi tetap terbuka.
+
+BEGIN;
+
+SELECT *
+FROM lab9.antrean_pekerjaan
+WHERE job_id = 2
+FOR UPDATE;
+
+
+-- [B] Sesi B: jalankan setelah Sesi A mengunci baris.
+-- Query diharapkan gagal dengan SQLSTATE 55P03.
+
+BEGIN;
+
+SELECT *
+FROM lab9.antrean_pekerjaan
+WHERE job_id = 2
+FOR UPDATE NOWAIT;
+
+-- Hasil yang diharapkan:
+-- ERROR: could not obtain lock on row
+-- SQLSTATE: 55P03
+
+
+-- [B] Sesi B: jalankan setelah query di atas gagal.
+
+ROLLBACK;
+
+
+-- [A] Sesi A: akhiri transaksi.
+
+ROLLBACK;
+
+
+-- ---------------------------------------------------------------------
+-- Q26. WRITE SKEW DENGAN REPEATABLE READ
+-- Kedua transaksi dapat COMMIT dan melanggar aturan bisnis.
+-- ---------------------------------------------------------------------
+
+-- [A] Persiapan tabel dokter jaga.
+-- Jalankan sekali sebelum pengujian Q26.
+
+DROP TABLE IF EXISTS lab9.dokter_jaga;
+
+CREATE TABLE lab9.dokter_jaga (
+    dokter_id INT PRIMARY KEY,
+    nama TEXT,
+    is_aktif BOOLEAN
+);
+
+INSERT INTO lab9.dokter_jaga (dokter_id, nama, is_aktif)
+VALUES
+    (1, 'Andi', TRUE),
+    (2, 'Budi', TRUE);
+
+
+-- [A] Sesi A: baca jumlah dokter aktif.
+
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+SELECT COUNT(*)
+FROM lab9.dokter_jaga
+WHERE is_aktif = TRUE;
+
+-- Hasil yang diharapkan: 2
+
+
+-- [B] Sesi B: jalankan setelah Sesi A melakukan SELECT,
+-- tetapi sebelum Sesi A melakukan UPDATE.
+
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+SELECT COUNT(*)
+FROM lab9.dokter_jaga
+WHERE is_aktif = TRUE;
+
+-- Hasil yang diharapkan: 2
+
+
+-- [A] Sesi A: nonaktifkan Andi.
+
+UPDATE lab9.dokter_jaga
+SET is_aktif = FALSE
+WHERE dokter_id = 1;
+
+-- Hasil yang diharapkan: UPDATE 1
+
+
+-- [B] Sesi B: nonaktifkan Budi.
+
+UPDATE lab9.dokter_jaga
+SET is_aktif = FALSE
+WHERE dokter_id = 2;
+
+-- Hasil yang diharapkan: UPDATE 1
+
+
+-- [A] Sesi A: COMMIT.
+
+COMMIT;
+
+
+-- [B] Sesi B: COMMIT.
+
+COMMIT;
+
+-- Hasil yang diharapkan:
+-- Kedua transaksi berhasil COMMIT.
+
+
+-- [A] Verifikasi hasil Q26.
+-- Jalankan setelah kedua transaksi selesai.
+
+SELECT *
+FROM lab9.dokter_jaga
+ORDER BY dokter_id;
+
+SELECT COUNT(*) AS jumlah_dokter_aktif
+FROM lab9.dokter_jaga
+WHERE is_aktif = TRUE;
+
+-- Hasil yang diharapkan:
+-- jumlah_dokter_aktif = 0
+-- Aturan bisnis minimal satu dokter aktif dilanggar.
+
+
+-- ---------------------------------------------------------------------
+-- Q27. SERIALIZABLE
+-- Mengulang eksperimen Q26 dengan SERIALIZABLE.
+-- Salah satu transaksi akan dibatalkan jika konflik serialisasi
+-- terdeteksi oleh PostgreSQL.
+-- ---------------------------------------------------------------------
+
+-- [A] Persiapan ulang data dokter.
+-- Jalankan setelah eksperimen Q26 selesai dan tidak ada transaksi
+-- yang masih terbuka.
+
+UPDATE lab9.dokter_jaga
+SET is_aktif = TRUE;
+
+-- Pastikan kedua dokter aktif kembali.
+
+SELECT *
+FROM lab9.dokter_jaga
+ORDER BY dokter_id;
+
+
+-- [A] Sesi A: baca jumlah dokter aktif.
+
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+SELECT COUNT(*)
+FROM lab9.dokter_jaga
+WHERE is_aktif = TRUE;
+
+-- Hasil yang diharapkan: 2
+
+
+-- [B] Sesi B: jalankan sebelum Sesi A melakukan UPDATE.
+
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+SELECT COUNT(*)
+FROM lab9.dokter_jaga
+WHERE is_aktif = TRUE;
+
+-- Hasil yang diharapkan: 2
+
+
+-- [A] Sesi A: nonaktifkan Andi.
+
+UPDATE lab9.dokter_jaga
+SET is_aktif = FALSE
+WHERE dokter_id = 1;
+
+-- Hasil yang diharapkan: UPDATE 1
+
+
+-- [B] Sesi B: nonaktifkan Budi.
+
+UPDATE lab9.dokter_jaga
+SET is_aktif = FALSE
+WHERE dokter_id = 2;
+
+-- Hasil yang diharapkan: UPDATE 1
+
+
+-- [A] Sesi A: COMMIT.
+
+COMMIT;
+
+
+-- [B] Sesi B: COMMIT.
+-- Pada skenario yang menghasilkan konflik serialisasi,
+-- COMMIT ini akan gagal dengan SQLSTATE 40001.
+
+COMMIT;
+
+-- Jika COMMIT Sesi B gagal:
+-- Jalankan ROLLBACK di Sesi B untuk mengakhiri transaksi gagal.
+
+
+-- [A] Verifikasi hasil Q27.
+-- Jalankan setelah transaksi selesai dan tidak ada transaksi terbuka.
+
+SELECT *
+FROM lab9.dokter_jaga
+ORDER BY dokter_id;
+
+SELECT COUNT(*) AS jumlah_dokter_aktif
+FROM lab9.dokter_jaga
+WHERE is_aktif = TRUE;
+
+
+-- ---------------------------------------------------------------------
+-- Q28. SIREAD LOCK
+-- Penjelasan ditulis pada laporan.md.
+-- ---------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------
+-- Q29. PSEUDOCODE RETRY
+-- Penjelasan ditulis pada laporan.md.
+-- ---------------------------------------------------------------------
+
 -- LANGKAH 6 · Q30-Q32 -- diisi anggota berikutnya
 -- =====================================================================

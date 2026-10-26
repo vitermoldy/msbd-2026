@@ -13,7 +13,7 @@ latihan pertemuan lain (`lab5`, `lab6`) tidak dibuat, diubah, maupun dihapus.
 | Langkah 2 | Q6–Q11 | Viter | selesai |
 | Langkah 3 | Q12–Q17 | Finsus | selesai |
 | Langkah 4 | Q18–Q23 | Naifah | selesai |
-| Langkah 5 | Q24–Q29 | «isi nama» | belum |
+| Langkah 5 | Q24–Q29 | Nadine | selesai |
 | Langkah 6 | Q30–Q32 | «isi nama» | belum |
 | `README.md`, `q00_setup.sql`, kerangka `laporan.md` | — | Viter | selesai |
 
@@ -535,16 +535,188 @@ PostgreSQL memiliki beberapa parameter *timeout* untuk membatasi waktu tunggu da
 **Fungsi:** Menentukan berapa lama PostgreSQL menunggu sebelum memeriksa apakah terjadi deadlock. Nilai bawaannya adalah `1s`.
 
 
-# Langkah 5 · Q24–Q29: SKIP LOCKED dan SERIALIZABLE
+# Langkah 5 · Q24–Q29: SKIP LOCKED, NOWAIT, dan SERIALIZABLE
 
-«Diisi anggota pemegang Langkah 5; bukti urutan di `bukti/serializable.md`.»
+> Bukti pengujian lengkap dan tabel urutan sesi dicatat pada `bukti/serializable.md`.
 
-## Q24. SKIP LOCKED
-## Q25. NOWAIT
-## Q26. Write skew pada REPEATABLE READ
+Bagian ini membahas penguncian baris menggunakan `SKIP LOCKED` dan `NOWAIT`, anomali *write skew* pada `REPEATABLE READ`, serta pencegahan konflik transaksi menggunakan `SERIALIZABLE`. Pengujian dilakukan menggunakan dua sesi PostgreSQL pada tabel `lab9.antrean_pekerjaan` dan `lab9.dokter_jaga`.
+
+---
+
+## Q24. SKIP LOCKED pada Antrean Pekerjaan
+
+`SKIP LOCKED` merupakan opsi penguncian baris yang memungkinkan sebuah transaksi melewati baris yang sedang dikunci oleh transaksi lain tanpa harus menunggu.
+
+### Hasil Pengujian
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|:---:|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `SELECT * FROM lab9.antrean_pekerjaan WHERE job_id = 1 FOR UPDATE;` | Baris `(1, PENDING)` berhasil diperoleh dan dikunci. |
+| 3 | B | `BEGIN;` | `BEGIN` |
+| 4 | B | `SELECT * FROM lab9.antrean_pekerjaan WHERE status = 'PENDING' FOR UPDATE SKIP LOCKED;` | Mengembalikan baris `(2, PENDING)` dan `(3, PENDING)`. Baris pertama dilewati. |
+| 5 | A | `ROLLBACK;` | Transaksi dibatalkan dan lock dilepaskan. |
+| 6 | B | `ROLLBACK;` | Transaksi dibatalkan dan lock dilepaskan. |
+
+Pada pengujian ini, Sesi A mengunci pekerjaan dengan `job_id = 1`. Ketika Sesi B menjalankan `SELECT ... FOR UPDATE SKIP LOCKED`, PostgreSQL melewati baris yang sedang dikunci dan mengembalikan dua baris lainnya, yaitu `job_id = 2` dan `job_id = 3`.
+
+Dari percobaan ini, terlihat bahwa `SKIP LOCKED` memungkinkan beberapa transaksi mengambil pekerjaan yang berbeda tanpa harus menunggu lock pada baris yang sedang digunakan transaksi lain. Fitur ini berguna untuk sistem antrean pekerjaan yang diproses oleh beberapa pekerja secara bersamaan.
+
+---
+
+## Q25. NOWAIT dan SQLSTATE 55P03
+
+`NOWAIT` digunakan ketika transaksi tidak ingin menunggu lock yang sedang dipegang transaksi lain. Jika baris tidak dapat dikunci, PostgreSQL langsung menghasilkan galat.
+
+### Hasil Pengujian
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|:---:|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `SELECT * FROM lab9.antrean_pekerjaan WHERE job_id = 2 FOR UPDATE;` | Baris `(2, PENDING)` berhasil dikunci. |
+| 3 | B | `BEGIN;` | `BEGIN` |
+| 4 | B | `SELECT * FROM lab9.antrean_pekerjaan WHERE job_id = 2 FOR UPDATE NOWAIT;` | Diharapkan gagal seketika karena baris sedang dikunci Sesi A. |
+| 5 | B | `ROLLBACK;` | Mengakhiri transaksi yang mengalami kegagalan. |
+| 6 | A | `ROLLBACK;` | Transaksi dibatalkan dan lock dilepaskan. |
+
+### Pesan Galat yang Diharapkan
+
+```text
+ERROR: could not obtain lock on row in relation "antrean_pekerjaan"
+SQLSTATE: 55P03
+```
+
+Pada pengujian ini, Sesi A mengunci baris dengan `job_id = 2`. Ketika Sesi B mencoba mengunci baris yang sama menggunakan `NOWAIT`, PostgreSQL langsung menghasilkan galat karena lock tidak dapat diperoleh.
+
+SQLSTATE `55P03` menunjukkan bahwa lock yang dibutuhkan tidak dapat diperoleh. Berbeda dengan penguncian biasa yang dapat membuat transaksi menunggu, `NOWAIT` langsung menghasilkan galat jika baris sedang dikunci transaksi lain.
+
+Setelah query Sesi B gagal, transaksi perlu diakhiri menggunakan `ROLLBACK` sebelum melanjutkan perintah lain dalam transaksi tersebut.
+
+---
+
+## Q26. Write Skew pada REPEATABLE READ
+
+*Write skew* merupakan anomali yang dapat terjadi ketika dua transaksi membaca kondisi data yang sama, kemudian memperbarui baris berbeda berdasarkan hasil pembacaan tersebut. Walaupun kedua transaksi berhasil, hasil akhirnya dapat melanggar aturan bisnis.
+
+Pada pengujian ini, aturan bisnis yang digunakan adalah minimal satu dokter harus tetap aktif.
+
+### Hasil Pengujian
+
+| Urutan | Sesi | Perintah | Hasil yang Diharapkan |
+|---:|:---:|---|---|
+| 1 | A | `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;` kemudian menghitung dokter aktif. | Jumlah dokter aktif adalah `2`. |
+| 2 | B | `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;` kemudian menghitung dokter aktif. | Jumlah dokter aktif adalah `2`. |
+| 3 | A | `UPDATE lab9.dokter_jaga SET is_aktif = FALSE WHERE dokter_id = 1;` | `UPDATE 1`. |
+| 4 | B | `UPDATE lab9.dokter_jaga SET is_aktif = FALSE WHERE dokter_id = 2;` | `UPDATE 1`. |
+| 5 | A | `COMMIT;` | Transaksi berhasil di-commit. |
+| 6 | B | `COMMIT;` | Diharapkan berhasil di-commit. |
+| 7 | A | `SELECT COUNT(*) FROM lab9.dokter_jaga WHERE is_aktif = TRUE;` | Jumlah dokter aktif menjadi `0`. |
+
+Pada awal pengujian, terdapat dua dokter aktif, yaitu Andi dan Budi. Sesi A dan Sesi B sama-sama membaca jumlah dokter aktif sebanyak dua orang menggunakan tingkat isolasi `REPEATABLE READ`.
+
+Setelah itu, Sesi A menonaktifkan Andi, sedangkan Sesi B menonaktifkan Budi. Karena kedua transaksi memperbarui baris yang berbeda, keduanya dapat berhasil melakukan `COMMIT`.
+
+Akibatnya, tidak ada dokter yang aktif lagi. Kondisi ini menunjukkan terjadinya *write skew*, karena kedua transaksi berhasil dijalankan, tetapi hasil akhirnya melanggar aturan bisnis bahwa minimal satu dokter harus tetap aktif.
+
+Percobaan ini menunjukkan bahwa `REPEATABLE READ` tidak selalu mencegah anomali yang melibatkan ketergantungan antarbari s. Oleh karena itu, aturan bisnis tertentu memerlukan perlindungan tambahan agar tetap terpenuhi ketika beberapa transaksi berjalan bersamaan.
+
+---
+
 ## Q27. SERIALIZABLE dan SQLSTATE 40001
-## Q28. SIReadLock
-## Q29. Pseudocode retry
+
+`SERIALIZABLE` merupakan tingkat isolasi transaksi yang dirancang untuk mencegah hasil transaksi yang tidak setara dengan urutan eksekusi serial yang valid. PostgreSQL menggunakan mekanisme *Serializable Snapshot Isolation* (SSI) untuk mendeteksi konflik serialisasi.
+
+Pengujian ini mengulang skenario Q26 dengan tingkat isolasi `SERIALIZABLE`.
+
+### Hasil Pengujian yang Diharapkan
+
+| Urutan | Sesi | Perintah | Hasil yang Diharapkan |
+|---:|:---:|---|---|
+| 1 | A | `BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;` kemudian menghitung dokter aktif. | Jumlah dokter aktif adalah `2`. |
+| 2 | B | `BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;` kemudian menghitung dokter aktif. | Jumlah dokter aktif adalah `2`. |
+| 3 | A | `UPDATE lab9.dokter_jaga SET is_aktif = FALSE WHERE dokter_id = 1;` | `UPDATE 1`, jika belum terjadi kegagalan serialisasi. |
+| 4 | B | `UPDATE lab9.dokter_jaga SET is_aktif = FALSE WHERE dokter_id = 2;` | `UPDATE 1`, jika belum terjadi kegagalan serialisasi. |
+| 5 | A | `COMMIT;` | Diharapkan berhasil jika Sesi A tidak menjadi transaksi yang dibatalkan. |
+| 6 | B | `COMMIT;` | Salah satu transaksi diharapkan gagal dengan SQLSTATE `40001` ketika konflik serialisasi terdeteksi. |
+| 7 | B | `ROLLBACK;` | Jalankan jika transaksi Sesi B mengalami kegagalan dan masih perlu diakhiri. |
+
+### Pesan Galat yang Mungkin Muncul
+
+```text
+ERROR: could not serialize access due to read/write dependencies among transactions
+SQLSTATE: 40001
+```
+
+Pada tingkat isolasi `SERIALIZABLE`, PostgreSQL mendeteksi ketergantungan baca-tulis ant transaksi yang dapat menghasilkan anomali serialisasi. Jika konflik terdeteksi, PostgreSQL dapat membatalkan salah satu transaksi dengan SQLSTATE `40001`.
+
+Dengan demikian, PostgreSQL mencegah kedua transaksi berhasil menghasilkan kondisi akhir yang melanggar aturan bisnis. Transaksi yang gagal perlu diulang dari awal setelah kegagalan ditangani dengan benar.
+
+Berbeda dengan Q26, ketika menggunakan `SERIALIZABLE`, kedua transaksi tidak dapat sama-sama berhasil jika hasil akhirnya menyebabkan pelanggaran aturan bisnis pada skenario *write skew* tersebut.
+
+**Catatan:** Kegagalan serialisasi dapat muncul saat perintah `UPDATE` atau `COMMIT`, bergantung pada urutan eksekusi dan saat PostgreSQL mendeteksi konflik. Pesan galat dan sesi yang dibatalkan harus disesuaikan dengan hasil aktual pengujian.
+
+---
+
+## Q28. Fungsi SIREAD Lock dan Sifat SELECT dalam SERIALIZABLE
+
+### Fungsi SIREAD Lock
+
+*SIREAD lock* merupakan mekanisme internal PostgreSQL yang digunakan dalam *Serializable Snapshot Isolation* (SSI) untuk mencatat pembacaan data. Informasi tersebut membantu PostgreSQL mendeteksi ketergantungan baca-tulis ant transaksi yang berpotensi menyebabkan anomali serialisasi.
+
+### Mengapa SELECT Tidak Mengunci Semua Baris?
+
+Pada tingkat isolasi `SERIALIZABLE`, PostgreSQL menggunakan SSI dan *predicate locking* untuk mendeteksi konflik yang dapat menyebabkan hasil transaksi tidak konsisten.
+
+Mekanisme ini tidak mengharuskan setiap perintah `SELECT` memblokir seluruh transaksi lain yang membaca atau mengubah data. Oleh karena itu, `SERIALIZABLE` tidak berarti setiap `SELECT` mengunci semua baris seperti `SELECT ... FOR UPDATE`.
+
+Dengan mekanisme tersebut, PostgreSQL dapat mendeteksi konflik serialisasi tanpa harus selalu menghalangi transaksi lain ketika membaca data.
+
+---
+
+## Q29. Pseudocode Retry Transaksi
+
+Retry merupakan mekanisme untuk mengulang transaksi ketika terjadi kegagalan yang dapat dipulihkan, seperti konflik serialisasi atau deadlock.
+
+### Pseudocode
+
+```python
+max_retries = 3
+base_delay = 0.1
+
+for attempt in range(max_retries):
+    try:
+        db.execute(
+            "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;"
+        )
+
+        # Jalankan seluruh operasi database dalam transaksi.
+
+        db.execute("COMMIT;")
+
+        # Operasi eksternal dilakukan setelah COMMIT berhasil.
+        send_notification()
+        break
+
+    except (SerializationFailure, DeadlockDetected):
+        db.execute("ROLLBACK;")
+
+        if attempt == max_retries - 1:
+            raise
+
+        delay = base_delay * (2 ** attempt)
+        delay += random.uniform(0, base_delay)
+        time.sleep(delay)
+```
+
+Retry digunakan ketika transaksi mengalami kegagalan akibat konflik serialisasi dengan SQLSTATE `40001` atau deadlock dengan SQLSTATE `40P01`.
+
+Jika transaksi gagal, seluruh transaksi perlu diulang dari awal setelah dilakukan `ROLLBACK`. Hal ini diperlukan karena data yang dibaca pada percobaan sebelumnya mungkin sudah tidak sesuai dengan keadaan database terbaru.
+
+Jumlah percobaan dibatasi menggunakan `max_retries` agar proses tidak berjalan tanpa henti. Jeda eksponensial dihitung dengan rumus `base_delay * (2 ** attempt)`, sehingga waktu tunggu bertambah pada setiap percobaan. Penambahan *jitter* memberikan variasi waktu tunggu agar transaksi yang gagal bersamaan tidak terus mencoba kembali pada waktu yang sama.
+
+Operasi eksternal, seperti mengirim notifikasi atau email, sebaiknya dilakukan setelah `COMMIT` berhasil agar notifikasi tidak dikirim untuk transaksi yang gagal. Dalam implementasi nyata, pola *transactional outbox* atau mekanisme idempotensi dapat digunakan untuk meningkatkan keandalan proses tersebut.
+
+Pseudocode ini bersifat umum. Nama exception dan cara penanganan transaksi perlu disesuaikan dengan library database yang digunakan.
 
 ---
 
@@ -584,7 +756,7 @@ disandarkan pada bukti:»
 | Viter | Langkah 1 (Q1–Q5), Langkah 2 (Q6–Q11), `q00_setup.sql`, `README.md`, kerangka laporan | Claude (Opus 5) dipakai untuk menyusun urutan perintah dua sesi, merapikan skrip SQL, dan menulis draf penjelasan | Seluruh perintah Q1–Q11 dijalankan sendiri pada dua jendela `psql` di kontainer `msbd-pg`; setiap angka pada tabel urutan, pesan galat, dan SQLSTATE dicocokkan dengan keluaran psql yang tersimpan di `bukti/hasil-sesi.txt`. Perilaku `READ UNCOMMITTED` dan `40001` diperiksa ulang terhadap dokumentasi resmi PostgreSQL bab *Transaction Isolation* |
 | «nama» | Langkah 3 | «isi sendiri» | «isi sendiri» |
 | Naifah | Langkah 4 | AI digunakan untuk membantu memahami materi, ketentuan tugas, pengerjaan query, dan penjelasan selama menyelesaikan Langkah 4. | Mengecek kembali hasil dan penjelasan dengan melihat bukti pengujian yang ada. |
-| «nama» | Langkah 5 | «isi sendiri» | «isi sendiri» |
+| Nadine | Langkah 5 (Q24-Q29) | AI digunakan untuk membantu memahami materi, ketentuan tugas, penyusunan query SQL, dan penjelasan selama menyelesaikan Langkah 5. | Mengecek kembali query, hasil yang diharapkan, dan penjelasan dengan mencocokkannya terhadap bukti pengujian PostgreSQL. |
 | «nama» | Langkah 6 | «isi sendiri» | «isi sendiri» |
 
 # Langkah 3 · Q12–Q17: Mencegah Lost Update dan Memahami MVCC

@@ -11,8 +11,8 @@ latihan pertemuan lain (`lab5`, `lab6`) tidak dibuat, diubah, maupun dihapus.
 |---|---|---|---|
 | Langkah 1 | Q1–Q5 | Viter | selesai |
 | Langkah 2 | Q6–Q11 | Viter | selesai |
-| Langkah 3 | Q12–Q17 | Finsus | belum |
-| Langkah 4 | Q18–Q23 | «isi nama» | belum |
+| Langkah 3 | Q12–Q17 | Finsus | selesai |
+| Langkah 4 | Q18–Q23 | Naifah | selesai |
 | Langkah 5 | Q24–Q29 | «isi nama» | belum |
 | Langkah 6 | Q30–Q32 | «isi nama» | belum |
 | `README.md`, `q00_setup.sql`, kerangka `laporan.md` | — | Viter | selesai |
@@ -404,16 +404,136 @@ adanya dengan SQLSTATE, lalu penjelasan sebab.»
 
 # Langkah 4 · Q18–Q23: Row Lock, Deadlock, dan Antrean Lock
 
-«Diisi anggota pemegang Langkah 4; bukti urutan di `bukti/deadlock.md`.»
-
-## Q18. Perbandingan FOR UPDATE, FOR NO KEY UPDATE, FOR SHARE, FOR KEY SHARE
-## Q19. Antrean lock pada baris yang sama
-## Q20. Deadlock dan SQLSTATE 40P01
-## Q21. Urutan penguncian konsisten
-## Q22. Deadlock lawan antrean lock panjang
-## Q23. lock_timeout, statement_timeout, idle_in_transaction_session_timeout, deadlock_timeout
+Bagian ini membahas penguncian baris (*row-level locks*), bagaimana dua sesi bisa mengalami *deadlock*, dan fungsi parameter *timeout* di PostgreSQL. Seluruh pengujian dilakukan pada tabel `lab9.rekening`.
 
 ---
+
+## Q18. Perbandingan Mode Lock Baris (FOR UPDATE, FOR NO KEY UPDATE, FOR SHARE, FOR KEY SHARE)
+
+PostgreSQL menyediakan beberapa mode penguncian baris untuk mengatur akses transaksi yang berjalan bersamaan. Setiap mode memiliki tingkat penguncian dan batasan yang berbeda, seperti berikut.
+
+### FOR UPDATE (Eksklusif Penuh)
+
+**Tujuan Umum:** Mengunci baris secara ketat ketika transaksi akan mengubah atau menghapus data. Lock ini mencegah transaksi lain mengubah baris yang sama selama penguncian masih berlangsung.
+
+**Kondisi Terhalang:** Transaksi lain harus menunggu jika ingin melakukan `UPDATE`, `DELETE`, atau meminta mode lock yang tidak kompatibel pada baris yang sama.
+
+### FOR NO KEY UPDATE (Eksklusif Ringan)
+
+**Tujuan Umum:** Mirip dengan `FOR UPDATE`, tetapi lebih longgar. Lock ini biasanya digunakan oleh operasi `UPDATE` yang tidak mengubah kolom kunci utama (*key columns*).
+
+**Kondisi Terhalang:** Transaksi lain yang meminta `FOR UPDATE` harus menunggu. Namun, transaksi yang meminta `FOR NO KEY UPDATE` atau mode lock berbagi yang kompatibel masih bisa berjalan.
+
+### FOR SHARE (Berbagi / Shared Lock)
+
+**Tujuan Umum:** Menjaga agar baris tidak diubah selama transaksi berlangsung, tetapi tetap memungkinkan transaksi lain membaca data tersebut.
+
+**Kondisi Terhalang:** Transaksi lain tidak bisa melakukan `UPDATE`, `DELETE`, atau meminta lock yang tidak kompatibel, seperti `FOR UPDATE` dan `FOR NO KEY UPDATE`. Transaksi lain masih bisa membaca baris atau meminta `FOR SHARE`.
+
+### FOR KEY SHARE (Berbagi Kunci Asing)
+
+**Tujuan Umum:** Merupakan mode lock berbagi yang paling longgar. Lock ini umumnya berkaitan dengan penjagaan integritas referensial antartabel (*foreign key*).
+
+**Kondisi Terhalang:** Lock ini mencegah baris dihapus atau kolom kunci yang direferensikan diubah. Namun, transaksi lain masih bisa memperbarui kolom biasa yang bukan bagian dari kunci tersebut.
+
+---
+
+## Q19. Antrean Lock pada Baris yang Sama (FOR UPDATE)
+
+Percobaan ini melihat apa yang terjadi ketika dua sesi meminta lock pada baris yang sama. Jika Sesi A sudah mengunci baris tersebut, Sesi B harus menunggu sampai lock dilepaskan.
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|:---:|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `SELECT * FROM lab9.rekening WHERE rekening_id = 1 FOR UPDATE;` | Baris ID 1 berhasil dikunci |
+| 3 | B | `BEGIN;` | `BEGIN` |
+| 4 | B | `SELECT * FROM lab9.rekening WHERE rekening_id = 1 FOR UPDATE;` | Menunggu karena lock masih dipegang Sesi A |
+| 5 | A | `COMMIT;` | `COMMIT`, lock dilepaskan |
+| 6 | B | Melanjutkan eksekusi | Baris ID 1 berhasil diperoleh |
+| 7 | B | `COMMIT;` | `COMMIT` |
+
+Pada langkah 4, Sesi B harus menunggu karena baris dengan `rekening_id = 1` masih dikunci oleh Sesi A. Setelah Sesi A melakukan `COMMIT` pada langkah 5, lock dilepaskan sehingga Sesi B bisa melanjutkan perintahnya.
+
+Dari percobaan ini, terlihat bahwa Sesi B baru bisa mendapatkan lock setelah Sesi A selesai. Dengan cara ini, PostgreSQL mengatur akses beberapa transaksi terhadap baris yang sama agar perubahan data tidak saling bertabrakan.
+
+---
+
+## Q20. Terjadinya Deadlock dan SQLSTATE 40P01
+
+*Deadlock* terjadi ketika dua transaksi saling menunggu lock yang sedang dipegang oleh transaksi lainnya. Akibatnya, kedua transaksi tidak bisa melanjutkan proses karena masing-masing membutuhkan lock yang masih dipegang oleh transaksi lain.
+
+| Urutan | Sesi | Perintah | Hasil |
+|---:|:---:|---|---|
+| 1 | A | `BEGIN;` | `BEGIN` |
+| 2 | A | `SELECT * FROM lab9.rekening WHERE rekening_id = 1 FOR UPDATE;` | Lock ID 1 dipegang Sesi A |
+| 3 | B | `BEGIN;` | `BEGIN` |
+| 4 | B | `SELECT * FROM lab9.rekening WHERE rekening_id = 2 FOR UPDATE;` | Lock ID 2 dipegang Sesi B |
+| 5 | A | `SELECT * FROM lab9.rekening WHERE rekening_id = 2 FOR UPDATE;` | Sesi A menunggu lock ID 2 yang dipegang Sesi B |
+| 6 | B | `SELECT * FROM lab9.rekening WHERE rekening_id = 1 FOR UPDATE;` | `ERROR 40P01` karena deadlock terdeteksi |
+
+Pesan galat yang tercetak pada Sesi B di langkah 6:
+
+```text
+ERROR:  40P01: deadlock detected
+DETAIL:  Process 1234 waits for ShareLock on transaction 5678; blocked by process 9012.
+         Process 9012 waits for ShareLock on transaction 3456; blocked by process 1234.
+HINT:    See server log for details.
+```
+
+Pada percobaan ini, Sesi A sudah mengunci ID 1, sedangkan Sesi B memegang lock ID 2. Ketika Sesi A meminta ID 2, prosesnya tertahan karena lock masih dipegang Sesi B. Sebaliknya, Sesi B juga tidak bisa mendapatkan ID 1 karena masih dikunci oleh Sesi A. Kondisi inilah yang menyebabkan deadlock.
+
+PostgreSQL mendeteksi kondisi tersebut berdasarkan parameter `deadlock_timeout`. Setelah deadlock terdeteksi, PostgreSQL membatalkan salah satu transaksi dan menampilkan SQLSTATE `40P01`. Transaksi yang dibatalkan perlu diakhiri sebelum dicoba kembali, sedangkan transaksi lainnya bisa melanjutkan proses setelah lock yang dibutuhkan tersedia.
+
+---
+
+## Q21. Pencegahan Deadlock dengan Urutan Penguncian Konsisten
+
+Deadlock dapat dihindari jika semua sesi mengunci `rekening_id` dari nilai terkecil ke terbesar.
+
+Pada Q20, Sesi A meminta ID 1 lalu ID 2, sedangkan Sesi B meminta ID 2 lalu ID 1. Karena urutannya berbeda, kedua sesi akhirnya saling menunggu.
+
+Jika semua transaksi mengikuti urutan penguncian yang sama, misalnya selalu mengunci ID terkecil terlebih dahulu, kondisi saling menunggu seperti pada Q20 dapat dicegah. Salah satu sesi mungkin tetap harus menunggu sampai transaksi lain selesai, tetapi kedua sesi tidak akan membentuk siklus tunggu karena urutan pengunciannya konsisten.
+
+---
+
+## Q22. Perbedaan Deadlock dan Antrean Lock Panjang (Long Lock Wait)
+
+Deadlock dan antrean lock panjang sama-sama membuat transaksi menunggu, tetapi penyebabnya berbeda.
+
+### Deadlock (Kebuntuan)
+
+**Karakteristik:** Terjadi ketika dua transaksi saling menunggu lock yang dipegang oleh transaksi lainnya. Kedua transaksi tidak bisa melanjutkan proses karena masing-masing menunggu sumber daya yang masih dikunci pihak lain.
+
+**Penanganan:** PostgreSQL mendeteksi deadlock dan membatalkan salah satu transaksi agar transaksi lainnya bisa melanjutkan proses.
+
+### Antrean Lock Panjang (Long Lock Wait)
+
+**Karakteristik:** Terjadi ketika sebuah transaksi harus menunggu karena lock masih dipegang transaksi lain. Namun, transaksi yang memegang lock tersebut tidak sedang menunggu sumber daya dari transaksi yang mengantre. Hal ini bisa terjadi ketika transaksi terlalu lama berjalan atau belum melakukan `COMMIT` maupun `ROLLBACK`.
+
+**Penanganan:** PostgreSQL tidak otomatis membatalkan transaksi hanya karena waktu tunggunya lama selama tidak terjadi deadlock. Batas waktu tunggu bisa diatur menggunakan parameter seperti `lock_timeout`.
+
+---
+
+## Q23. Fungsi Parameter Waktu (Timeouts) di PostgreSQL
+
+PostgreSQL memiliki beberapa parameter *timeout* untuk membatasi waktu tunggu dan eksekusi perintah. Parameter ini membantu mencegah transaksi atau perintah SQL berjalan terlalu lama.
+
+### `lock_timeout`
+
+**Fungsi:** Membatasi waktu sebuah perintah SQL menunggu untuk mendapatkan lock. Jika batas waktu terlampaui, perintah tersebut dibatalkan.
+
+### `statement_timeout`
+
+**Fungsi:** Membatasi waktu eksekusi satu perintah SQL. Jika perintah belum selesai sampai batas waktu tercapai, PostgreSQL membatalkannya.
+
+### `idle_in_transaction_session_timeout`
+
+**Fungsi:** Membatasi waktu sebuah sesi boleh tidak aktif ketika transaksi masih terbuka. Parameter ini membantu mencegah transaksi yang ditinggalkan tetap menahan lock dan menghambat sesi lain.
+
+### `deadlock_timeout`
+
+**Fungsi:** Menentukan berapa lama PostgreSQL menunggu sebelum memeriksa apakah terjadi deadlock. Nilai bawaannya adalah `1s`.
+
 
 # Langkah 5 · Q24–Q29: SKIP LOCKED dan SERIALIZABLE
 
@@ -462,7 +582,10 @@ disandarkan pada bukti:»
 | Anggota | Bagian | Pemakaian AI | Cara verifikasi |
 |---|---|---|---|
 | Viter | Langkah 1 (Q1–Q5), Langkah 2 (Q6–Q11), `q00_setup.sql`, `README.md`, kerangka laporan | Claude (Opus 5) dipakai untuk menyusun urutan perintah dua sesi, merapikan skrip SQL, dan menulis draf penjelasan | Seluruh perintah Q1–Q11 dijalankan sendiri pada dua jendela `psql` di kontainer `msbd-pg`; setiap angka pada tabel urutan, pesan galat, dan SQLSTATE dicocokkan dengan keluaran psql yang tersimpan di `bukti/hasil-sesi.txt`. Perilaku `READ UNCOMMITTED` dan `40001` diperiksa ulang terhadap dokumentasi resmi PostgreSQL bab *Transaction Isolation* |
-
+| «nama» | Langkah 3 | «isi sendiri» | «isi sendiri» |
+| Naifah | Langkah 4 | AI digunakan untuk membantu memahami materi, ketentuan tugas, pengerjaan query, dan penjelasan selama menyelesaikan Langkah 4. | Mengecek kembali hasil dan penjelasan dengan melihat bukti pengujian yang ada. |
+| «nama» | Langkah 5 | «isi sendiri» | «isi sendiri» |
+| «nama» | Langkah 6 | «isi sendiri» | «isi sendiri» |
 
 # Langkah 3 · Q12–Q17: Mencegah Lost Update dan Memahami MVCC
 
@@ -579,6 +702,4 @@ nilai metadata di tuple (`xmin`/`xmax`) dan status global transaksi di CLOG.
   proses *sequential scan*. Proses `VACUUM` bertugas memindai halaman heap, membebaskan ruang yang
   ditempati oleh dead tuple agar dapat dipakai kembali (*reused*) oleh tuple baru, serta mencegah
   masalah kritis *transaction ID wraparound*.
-| «nama» | Langkah 4 | «isi sendiri» | «isi sendiri» |
-| «nama» | Langkah 5 | «isi sendiri» | «isi sendiri» |
-| «nama» | Langkah 6 | «isi sendiri» | «isi sendiri» |
+

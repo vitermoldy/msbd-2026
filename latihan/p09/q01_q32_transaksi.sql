@@ -493,3 +493,50 @@ WHERE is_aktif = TRUE;
 
 -- LANGKAH 6 · Q30-Q32 -- diisi anggota berikutnya
 -- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Q30. READ SKEW DENGAN REPEATABLE READ
+-- ---------------------------------------------------------------------
+
+-- Sesi A
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SHOW transaction_isolation;
+SELECT rekening_id, saldo FROM lab9.rekening WHERE rekening_id = 1;
+
+-- Sesi B
+BEGIN;
+UPDATE lab9.rekening SET saldo = saldo - 100000 WHERE rekening_id = 1;
+UPDATE lab9.rekening SET saldo = saldo + 100000 WHERE rekening_id = 2;
+COMMIT;
+
+-- Sesi A
+SELECT rekening_id, saldo FROM lab9.rekening WHERE rekening_id = 2;
+COMMIT;
+
+--Putaran 2: REPEATABLE READ. Reset dulu dengan perintah UPDATE
+docker compose exec postgres psql -U msbd -d pagila -c "UPDATE lab9.rekening SET saldo = 1000000 WHERE rekening_id IN (1,2);"
+
+-- Sesi A
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SHOW transaction_isolation;
+SELECT rekening_id, saldo FROM lab9.rekening WHERE rekening_id = 1;
+
+-- Sesi B
+BEGIN;
+UPDATE lab9.rekening SET saldo = saldo - 100000 WHERE rekening_id = 1;
+UPDATE lab9.rekening SET saldo = saldo + 100000 WHERE rekening_id = 2;
+COMMIT;
+
+-- Sesi A
+SELECT rekening_id, saldo FROM lab9.rekening WHERE rekening_id = 2;
+COMMIT;
+
+-- ---------------------------------------------------------------------
+-- Q31. Rekomendasi isolation level
+-- Penjelasan ditulis pada laporan.md.
+-- ---------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------
+-- Q32. Tiga pembelajaran utama
+-- Penjelasan ditulis pada laporan.md.
+-- ---------------------------------------------------------------------

@@ -14,7 +14,7 @@ latihan pertemuan lain (`lab5`, `lab6`) tidak dibuat, diubah, maupun dihapus.
 | Langkah 3 | Q12–Q17 | Finsus | selesai |
 | Langkah 4 | Q18–Q23 | Naifah | selesai |
 | Langkah 5 | Q24–Q29 | Nadine | selesai |
-| Langkah 6 | Q30–Q32 | «isi nama» | belum |
+| Langkah 6 | Q30–Q32 | Rizky| selesai|
 | `README.md`, `q00_setup.sql`, kerangka `laporan.md` | — | Viter | selesai |
 
 ## Kondisi uji
@@ -722,10 +722,36 @@ Pseudocode ini bersifat umum. Nama exception dan cara penanganan transaksi perlu
 
 # Langkah 6 · Q30–Q32: Analisis dan Rekomendasi
 
-«Diisi anggota pemegang Langkah 6. Q30 menggabungkan tabel Q11 di atas dengan hasil Q26–Q27.»
+## Q30 — Matriks Enam Anomali
 
-## Q30. Matriks enam anomali
-## Q31. Rekomendasi isolation level
+| # | Anomali | Cara reproduksi (urutan Sesi A / Sesi B) | Level tempat terjadi | Hasil yang diharapkan di PostgreSQL | Bukti tim | Mitigasi |
+|---|---|---|---|---|---|---|
+| 1 | Dirty read | A: `BEGIN; UPDATE` saldo rekening 1 (belum COMMIT). B: `BEGIN ISOLATION LEVEL READ UNCOMMITTED; SELECT` saldo rekening 1. | Tidak dapat terjadi di PostgreSQL | B tetap melihat nilai lama yang sudah di-COMMIT. `READ UNCOMMITTED` diperlakukan sebagai `READ COMMITTED`. | hasil-sesi.txt langkah 078–086: A mengubah saldo rek. 1 menjadi 1,00 tanpa COMMIT; B (`READ UNCOMMITTED`) tetap membaca 1.000.000,00; setelah ROLLBACK A, saldo 1.000.000,00. | Tidak perlu mitigasi di PostgreSQL. Pada DBMS lain, jangan memakai level di bawah `READ COMMITTED` untuk data penting. |
+| 2 | Non-repeatable read | `READ COMMITTED`. A: `BEGIN; SELECT` saldo rek. 1. B: `UPDATE` saldo rek. 1 + `COMMIT`. A: `SELECT` yang sama lagi. | `READ COMMITTED` | Pembacaan kedua A berbeda dari yang pertama. Pada `REPEATABLE READ` kedua pembacaan sama. | hasil-sesi.txt langkah 050–052 (READ COMMITTED: 1.000.000,00 lalu 700.000,00) dan langkah 057–059 (REPEATABLE READ: 1.000.000,00 lalu 1.000.000,00). | `REPEATABLE READ` (snapshot per transaksi), atau kunci baris dengan `FOR SHARE`/`FOR UPDATE` bila perlu. |
+| 3 | Phantom read | A: `BEGIN; SELECT count(*)` dengan predikat saldo > nilai tertentu. B: `INSERT` baris yang memenuhi predikat + `COMMIT`. A: ulangi `SELECT count(*)`. | `READ COMMITTED` | Jumlah baris bertambah pada pembacaan kedua A. Pada `REPEATABLE READ` jumlah tetap (snapshot isolation PostgreSQL lebih kuat daripada standar SQL). | hasil-sesi.txt langkah 068–070 (READ COMMITTED: 2 lalu 3) dan langkah 073–075 (REPEATABLE READ: 3 lalu 3; 4 setelah COMMIT, langkah 077). | `REPEATABLE READ` atau `SERIALIZABLE`. |
+| 4 | Lost update | `READ COMMITTED`. A dan B sama-sama `SELECT` saldo. Masing-masing menghitung saldo baru di aplikasi dan menulis nilai tetap. A `COMMIT`, lalu B `COMMIT`. | `READ COMMITTED` (penulisan nilai hasil hitung lama) | Nilai akhir hanya mencerminkan pembaruan B; pembaruan A hilang. Pada `REPEATABLE READ`, `UPDATE` B justru gagal dengan SQLSTATE 40001 (`could not serialize access due to concurrent update`). | hasil-sesi.txt langkah 088–095: kedua sesi membaca 1.000.000,00; A menulis 900.000 + COMMIT; B menulis 950.000 + COMMIT; saldo akhir 950.000,00 (pembaruan A hilang). Pada REPEATABLE READ: langkah 060, `ERROR 40001: could not serialize access due to concurrent update`. | Pembaruan atomik `SET saldo = saldo - x` (Q12), `SELECT ... FOR UPDATE` (Q13), atau kontrol versi/optimistic locking (Q14). |
+| 5 | Write skew | `REPEATABLE READ`, tabel `dokter_jaga` dengan 2 dokter aktif. A dan B masing-masing menghitung dokter aktif (hasil 2), lalu A menonaktifkan dokter 1 dan B menonaktifkan dokter 2. Keduanya `COMMIT`. | `REPEATABLE READ` | Kedua transaksi berhasil COMMIT; jumlah dokter aktif menjadi 0 sehingga aturan "minimal satu aktif" dilanggar. Pada `SERIALIZABLE`, salah satu transaksi dibatalkan dengan SQLSTATE 40001. | «hasil Q26 dan Q27» | `SERIALIZABLE` dengan retry, atau kunci eksplisit pada baris yang menentukan aturan (`SELECT ... FOR UPDATE` atas semua dokter aktif). |
+| 6 | Pembacaan tidak konsisten (read skew) | `READ COMMITTED`. A: `BEGIN; SELECT` saldo rek. 1. B: transfer 100.000 dari rek. 1 ke rek. 2 + `COMMIT`. A: `SELECT` saldo rek. 2. | `READ COMMITTED` | A melihat rek. 1 sebelum transfer dan rek. 2 sesudah transfer, sehingga total yang terlihat 2.100.000, bukan 2.000.000. Pada `REPEATABLE READ` total tetap 2.000.000. | Putaran READ COMMITTED sudah ada: rek. 1 = 1.000.000,00, rek. 2 = 1.100.000,00, total terlihat 2.100.000. Putaran REPEATABLE READ: sisi Sesi A sudah ada (`SHOW` = repeatable read; rek. 1 = rek. 2 = 1.000.000,00, total terlihat 2.000.000). Log Sesi B (transfer + COMMIT di sela dua SELECT A) dan pengecekan saldo sesudahnya BELUM ditempel; lengkapi dulu sebelum dipakai sebagai bukti. | Satu pernyataan `SELECT sum(saldo)` (satu snapshot per pernyataan), atau transaksi `REPEATABLE READ READ ONLY` untuk laporan. |
+
+Catatan baris 6: modul tidak mendefinisikan "pembacaan yang tidak
+konsisten". Draf ini menafsirkannya sebagai read skew (dua pembacaan
+dalam satu transaksi melihat keadaan basis data yang tidak pernah ada
+secara bersamaan). Konfirmasikan tafsiran ini ke pengajar/tim. Anomali ini
+tidak tercakup oleh Q6–Q29, sehingga perlu satu percobaan tambahan.
+
+## Q31 — Rekomendasi Isolation Level
+
+| Kebutuhan | Rekomendasi | Alasan | Kompromi dan risiko |
+|---|---|---|---|
+| Pembacaan sederhana yang dapat menerima perubahan antarpernyataan | `READ COMMITTED` (bawaan PostgreSQL) | Setiap pernyataan melihat snapshot baru, overhead terendah, tidak menghasilkan kegagalan serialisasi. | Non-repeatable read, phantom, dan read skew antarpernyataan dapat terjadi. Aman hanya jika tiap pernyataan berdiri sendiri. |
+| Laporan yang membutuhkan snapshot konsisten | `REPEATABLE READ`, sebaiknya `READ ONLY` | Seluruh pernyataan dalam transaksi melihat satu snapshot yang sama. | Snapshot yang berumur panjang menahan pembersihan baris lama oleh vacuum (bloat). Transaksi yang menulis dapat menerima 40001. Transaksi `READ ONLY` murni tidak mengalaminya. |
+| Transaksi dengan aturan bisnis lintas beberapa baris | `SERIALIZABLE` | Mencegah write skew yang lolos pada `REPEATABLE READ`. | Dapat muncul serialization failure (SQLSTATE 40001), bahkan pada kasus yang sebenarnya aman (false positive). Aplikasi wajib mengulang seluruh transaksi, dengan batas percobaan dan jeda bertambah (lihat Q29). Ada overhead pelacakan SIReadLock. |
+
+Alternatif untuk baris ketiga: kunci eksplisit (`SELECT ... FOR UPDATE`)
+pada baris yang menentukan aturan, dengan urutan penguncian konsisten
+(lihat Q21). Kompromi: menyerialkan akses secara manual dan berisiko
+deadlock bila urutan penguncian tidak seragam.
+
 ## Q32. Tiga pelajaran utama
 
 ---

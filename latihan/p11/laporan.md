@@ -7,7 +7,7 @@ penyamaran, audit, dan UU PDP, seluruhnya pada skema `lab11`.
 
 | Nama | NIM | Kontribusi | Commit |
 |---|---|---|---|
-| Viter | «isi NIM» | Langkah 1 (setup, dua kontainer, `q00_setup.sql`, `rentan.py`, `README.md`), Langkah 2 (Q1–Q5, Reflektif A), Langkah 3 (Q6–Q11, Reflektif B) | «isi sesudah push» |
+| Viter | 251402079 | Langkah 1 (setup, dua kontainer, `q00_setup.sql`, `rentan.py`, `README.md`), Langkah 2 (Q1–Q5, Reflektif A), Langkah 3 (Q6–Q11, Reflektif B) | `2d81d1e` … `90f5472` (19 commit) pada cabang `latihan/p11-keamanan` |
 | «nama» | «NIM» | Langkah 4 (Q12–Q18, Reflektif C) | |
 | «nama» | «NIM» | Langkah 5 (Q19–Q24, Reflektif D) | |
 | «nama» | «NIM» | Langkah 6 (Q25–Q30, Reflektif E) | |
@@ -17,13 +17,14 @@ penyamaran, audit, dan UU PDP, seluruhnya pada skema `lab11`.
 
 | Hal | Nilai |
 |---|---|
-| Versi PostgreSQL | «salin dari keluaran `version()` pada `q00_setup.sql`» |
+| Versi PostgreSQL | PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit |
 | Basis data | `msbd`, skema kerja `lab11` |
 | Kontainer | `lab11-db` (postgres:17) dan `lab11-web` (python:3.12-slim + psycopg 3.2.3) |
-| Jaringan | `lab11_labnet`, `Internal` = «salin keluaran `docker network inspect`» |
+| Jaringan | `lab11_labnet`, `Internal` = **`true`** |
 | Porta yang diterbitkan ke host | tidak ada; kolom `PORTS` untuk `lab11-db` kosong |
 | Ekstensi | `pgcrypto` (dipasang `q00_setup.sql`, dibutuhkan Langkah 5) |
 | Data awal | `tenant` 3 · `pelanggan` 30000 · `akun` 4 · `transaksi` 120000; tiap penyewa 10000 pelanggan |
+| Bukti mentah | `keluaran-q01-q11.txt` — 812 baris keluaran psql apa adanya dari satu kali jalan penuh |
 | Peran | 7: `skema_owner`, `app_read`, `app_write` (tanpa login); `app_laporan`, `app_portal`, `app_analitik`, `app_audit` (login) |
 
 ### Catatan jujur tentang berkas modul
@@ -49,6 +50,10 @@ pada PostgreSQL 16 (`arwdDxt`). Huruf itu tidak mengubah satu pun kesimpulan Q1�
 # Langkah 1 · Klaster Tertutup dan Skema lab11
 
 Dijalankan dari `c:\msbd-2026\lab11`. Perintah lengkapnya ada di `latihan/p11/README.md`.
+Seluruh keluaran yang dikutip di laporan ini berasal dari satu kali jalan penuh
+(`jalankan_semua.sql`), tersimpan apa adanya di `keluaran-q01-q11.txt`: 812 baris, 13 penanda
+tahap, dan tepat empat jenis SQLSTATE yang memang diharapkan (`42501` tiga kali, `42601`,
+`2BP01`, `22P02`) tanpa satu pun galat lain.
 
 ```bat
 docker compose -f docker-compose.lab11.yml build

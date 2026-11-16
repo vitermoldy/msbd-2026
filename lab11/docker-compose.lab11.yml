@@ -1,0 +1,61 @@
+# Diminta: dua kontainer pada jaringan yang terbukti tertutup, satu basis data
+#          dan satu tempat menjalankan rentan.py.
+# Dipilih: jaringan bertanda internal: true dan tanpa satu pun "ports:", supaya
+#          ketertutupan dapat dibuktikan dengan docker network inspect, bukan
+#          dengan janji di laporan.
+# Alternatif: menerbitkan 5432 ke host lalu menjalankan rentan.py dari .venv
+#             Windows; tidak dipilih karena begitu porta terbuka, klaim
+#             "jaringan tertutup" pada pernyataan etika tidak lagi benar.
+
+name: lab11                      # memaksa nama jaringan menjadi lab11_labnet
+
+services:
+  lab11-db:
+    image: postgres:17
+    container_name: lab11-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: lab11-postgres-tertutup
+      POSTGRES_DB: msbd
+    volumes:
+      - ../latihan/p11:/lab11:ro   # q00_setup.sql langsung terbaca di /lab11
+      - lab11_data:/var/lib/postgresql/data
+    networks:
+      - labnet
+    # Tidak ada "ports:" di sini. Basis data hanya dijangkau dari dalam
+    # jaringan labnet dan lewat docker exec.
+    healthcheck:
+      # Tanpa ini, perintah psql yang dijalankan tepat sesudah "up -d" akan
+      # gagal dengan "connection to server on socket ... No such file or
+      # directory", karena initdb pada penyalaan pertama butuh beberapa detik.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d msbd -q"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  lab11-web:
+    build: ./web               # psycopg dipasang saat build, bukan saat jalan
+    container_name: lab11-web
+    environment:
+      PGHOST: lab11-db
+      PGDATABASE: msbd
+      LAB11_TENANT: "1"
+      LAB11_USER: app_portal
+      LAB11_PASSWORD: lab11-portal
+    volumes:
+      - ../latihan/p11:/app      # rentan.py disunting dari host, langsung terpakai
+    working_dir: /app
+    command: ["sleep", "infinity"]
+    depends_on:
+      lab11-db:
+        condition: service_healthy
+    networks:
+      - labnet
+
+networks:
+  labnet:
+    internal: true               # inilah yang dibuktikan pada Langkah 1
+
+volumes:
+  lab11_data:

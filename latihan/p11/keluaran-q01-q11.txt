@@ -1,0 +1,812 @@
+########## q00_setup ##########
+CREATE EXTENSION
+psql:/lab11/q00_setup.sql:25: NOTICE:  schema "lab11" does not exist, skipping
+DROP SCHEMA
+DO
+DO
+GRANT ROLE
+GRANT ROLE
+GRANT ROLE
+CREATE SCHEMA
+ALTER DEFAULT PRIVILEGES
+GRANT
+SET
+CREATE TABLE
+INSERT 0 3
+CREATE TABLE
+INSERT 0 30000
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+INSERT 0 4
+CREATE TABLE
+INSERT 0 120000
+CREATE INDEX
+RESET
+GRANT
+GRANT
+GRANT
+ANALYZE
+ANALYZE
+ANALYZE
+ANALYZE
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
+
+ tenant | pelanggan | akun | transaksi 
+--------+-----------+------+-----------
+      3 |     30000 |    4 |    120000
+(1 row)
+
+ tenant_id | count 
+-----------+-------
+         1 | 10000
+         2 | 10000
+         3 | 10000
+(3 rows)
+
+   rolname    | bisa_login | superuser | bypass_rls 
+--------------+------------+-----------+------------
+ app_read     | f          | f         | f
+ app_write    | f          | f         | f
+ skema_owner  | f          | f         | f
+ app_analitik | t          | f         | f
+ app_audit    | t          | f         | f
+ app_laporan  | t          | f         | f
+ app_portal   | t          | f         | f
+(7 rows)
+
+ tablename | tableowner  
+-----------+-------------
+ akun      | skema_owner
+ pelanggan | skema_owner
+ tenant    | skema_owner
+ transaksi | skema_owner
+(4 rows)
+
+ q12_pembanding 
+----------------
+            111
+(1 row)
+
+########## q01_hak_pemilik ##########
+=== 1a. Keadaan awal: ACL dan pemilik tabel ===
+  relname  |   pemilik   |                                                     relacl                                                     
+-----------+-------------+----------------------------------------------------------------------------------------------------------------
+ pelanggan | skema_owner | {skema_owner=arwdDxtm/skema_owner,app_read=r/skema_owner,app_write=awd/skema_owner,app_analitik=r/skema_owner}
+(1 row)
+
+ update_sebelum_revoke 
+-----------------------
+ t
+(1 row)
+
+=== 1b. Cabut UPDATE dari pemilik ===
+REVOKE
+                                              acl_sesudah_revoke                                               
+---------------------------------------------------------------------------------------------------------------
+ {skema_owner=ardDxtm/skema_owner,app_read=r/skema_owner,app_write=awd/skema_owner,app_analitik=r/skema_owner}
+(1 row)
+
+ update_sesudah_revoke 
+-----------------------
+ f
+(1 row)
+
+=== 1c. UPDATE sebagai skema_owner: harus DITOLAK ===
+SET
+ peran_aktif | peran_login 
+-------------+-------------
+ skema_owner | postgres
+(1 row)
+
+BEGIN
+psql:/lab11/q01_hak_pemilik.sql:36: ERROR:  42501: permission denied for table pelanggan
+LOCATION:  aclcheck_error, aclchk.c:2843
+ROLLBACK
+=== 1d. Pemilik memberikan hak itu kembali KEPADA DIRINYA SENDIRI ===
+GRANT
+ update_sesudah_grant_ulang 
+----------------------------
+ t
+(1 row)
+
+=== 1e. UPDATE yang sama: sekarang BERHASIL ===
+BEGIN
+UPDATE 1
+ baris_terdampak 
+-----------------
+               1
+(1 row)
+
+ROLLBACK
+RESET
+=== 1f. ACL akhir: hak kembali. Perhatikan nama sesudah tanda / yaitu pemberi hak ===
+                                                   acl_akhir                                                    
+----------------------------------------------------------------------------------------------------------------
+ {skema_owner=arwdDxtm/skema_owner,app_read=r/skema_owner,app_write=awd/skema_owner,app_analitik=r/skema_owner}
+(1 row)
+
+########## q02_drop_bukan_hak ##########
+=== 2a. Mencabut DROP dari pemilik: tidak ada sintaksnya ===
+psql:/lab11/q02_drop_bukan_hak.sql:15: ERROR:  42601: unrecognized privilege type "drop"
+LOCATION:  string_to_privilege, aclchk.c:2651
+=== 2b. Hak apa saja yang SEBENARNYA dapat diberikan dan dicabut ===
+                         hak_yang_dapat_di_grant                         
+-------------------------------------------------------------------------
+ DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+(1 row)
+
+   grantee   |                              hak                              
+-------------+---------------------------------------------------------------
+ app_read    | SELECT
+ skema_owner | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+(2 rows)
+
+=== 2c. Pemilik tetap bisa DROP meski seluruh hak biasa dicabut ===
+REVOKE
+ boleh_select | boleh_insert | boleh_update | boleh_delete 
+--------------+--------------+--------------+--------------
+ f            | f            | f            | f
+(1 row)
+
+SET
+ peran_aktif 
+-------------
+ skema_owner
+(1 row)
+
+psql:/lab11/q02_drop_bukan_hak.sql:40: ERROR:  42501: permission denied for table akun
+LOCATION:  aclcheck_error, aclchk.c:2843
+BEGIN
+ALTER TABLE
+DROP TABLE
+                      hasil                      
+-------------------------------------------------
+ ALTER dan DROP berhasil dijalankan oleh pemilik
+(1 row)
+
+ROLLBACK
+RESET
+=== 2d. Pulihkan hak biasa pemilik ===
+GRANT
+ relname |   pemilik   |                          relacl                           
+---------+-------------+-----------------------------------------------------------
+ akun    | skema_owner | {app_read=r/skema_owner,skema_owner=arwdDxtm/skema_owner}
+(1 row)
+
+ akun_masih_utuh 
+-----------------
+               4
+(1 row)
+
+########## q03_default_privileges ##########
+=== 3a. Default privileges yang terpasang di skema lab11 ===
+ untuk_peran | skema | jenis_objek |        acl_bawaan        
+-------------+-------+-------------+--------------------------
+ skema_owner | lab11 | r           | {app_read=r/skema_owner}
+(1 row)
+
+=== 3b. Tabel dibuat oleh postgres ===
+ pembuat  
+----------
+ postgres
+(1 row)
+
+CREATE TABLE
+=== 3c. Tabel dibuat oleh skema_owner, segala hal lain sama ===
+SET
+   pembuat   
+-------------
+ skema_owner
+(1 row)
+
+CREATE TABLE
+RESET
+=== 3d. Selisihnya ===
+      tabel       |   pemilik   | app_laporan_boleh_select |                          relacl                           
+------------------+-------------+--------------------------+-----------------------------------------------------------
+ catatan_postgres | postgres    | f                        | 
+ catatan_owner    | skema_owner | t                        | {skema_owner=arwdDxtm/skema_owner,app_read=r/skema_owner}
+(2 rows)
+
+=== 3e. Perintah yang seharusnya sudah dijalankan untuk peran pembuat ===
+ALTER DEFAULT PRIVILEGES
+CREATE TABLE
+       tabel        | pemilik  | app_laporan_boleh_select |                      relacl                      
+--------------------+----------+--------------------------+--------------------------------------------------
+ catatan_postgres_2 | postgres | t                        | {postgres=arwdDxtm/postgres,app_read=r/postgres}
+(1 row)
+
+=== 3f. Bersihkan, termasuk default privileges yang baru dipasang ===
+ALTER DEFAULT PRIVILEGES
+DROP TABLE
+DROP TABLE
+DROP TABLE
+ tabel_sisa_di_lab11 
+---------------------
+                   4
+(1 row)
+
+########## q04_grant_option ##########
+=== 4a. Keadaan awal ACL transaksi ===
+                                      acl_awal                                       
+-------------------------------------------------------------------------------------
+ {skema_owner=arwdDxtm/skema_owner,app_read=r/skema_owner,app_write=awd/skema_owner}
+(1 row)
+
+=== 4b. Beri app_write SELECT WITH GRANT OPTION ===
+GRANT
+                               acl_sesudah_grant_option                                
+---------------------------------------------------------------------------------------
+ {skema_owner=arwdDxtm/skema_owner,app_read=r/skema_owner,app_write=ar*wd/skema_owner}
+(1 row)
+
+=== 4c. app_write meneruskan haknya ke app_analitik ===
+SET
+  pemberi  
+-----------
+ app_write
+(1 row)
+
+GRANT
+RESET
+                                             acl_sesudah_diteruskan                                             
+----------------------------------------------------------------------------------------------------------------
+ {skema_owner=arwdDxtm/skema_owner,app_read=r/skema_owner,app_write=ar*wd/skema_owner,app_analitik=r/app_write}
+(1 row)
+
+ analitik_boleh_baca 
+---------------------
+ t
+(1 row)
+
+=== 4d. Cabut HANYA grant option, tanpa CASCADE: harus DITOLAK ===
+=== 4e. Ulangi dengan CASCADE ===
+psql:/lab11/q04_grant_option.sql:34: ERROR:  2BP01: dependent privileges exist
+HINT:  Use CASCADE to revoke them too.
+LOCATION:  recursive_revoke, acl.c:1339
+REVOKE
+                                 acl_sesudah_cascade                                  
+--------------------------------------------------------------------------------------
+ {skema_owner=arwdDxtm/skema_owner,app_read=r/skema_owner,app_write=arwd/skema_owner}
+(1 row)
+
+=== 4f. Siapa yang masih bisa membaca ===
+ analitik | app_write 
+----------+-----------
+ f        | t
+(1 row)
+
+=== 4g. Dari mana kebolehan app_write datang: grant langsung DAN warisan ===
+            sumber            | ada 
+------------------------------+-----
+ grant langsung pada ACL      |   1
+ warisan keanggotaan app_read |   1
+(2 rows)
+
+=== 4h. Pulihkan keadaan untuk soal berikutnya ===
+REVOKE
+                                      acl_akhir                                      
+-------------------------------------------------------------------------------------
+ {skema_owner=arwdDxtm/skema_owner,app_read=r/skema_owner,app_write=awd/skema_owner}
+(1 row)
+
+########## q05_tabel_peran ##########
+=== 5a. Tujuh peran: atribut dan kemampuan login ===
+    peran     | dapat_login | superuser | bypass_rls | boleh_buat_peran | anggota_dari 
+--------------+-------------+-----------+------------+------------------+--------------
+ app_read     | tidak       | f         | f          | f                | -
+ app_write    | tidak       | f         | f          | f                | app_read
+ skema_owner  | tidak       | f         | f          | f                | -
+ app_analitik | ya          | f         | f          | f                | -
+ app_audit    | ya          | f         | f          | f                | -
+ app_laporan  | ya          | f         | f          | f                | app_read
+ app_portal   | ya          | f         | f          | f                | app_write
+(7 rows)
+
+=== 5b. Hak langsung per tabel, hanya yang tercatat di ACL ===
+    peran     |   tabel   |                              hak_langsung                               
+--------------+-----------+-------------------------------------------------------------------------
+ app_analitik | pelanggan | SELECT
+ app_read     | akun      | SELECT
+ app_read     | pelanggan | SELECT
+ app_read     | tenant    | SELECT
+ app_read     | transaksi | SELECT
+ app_write    | pelanggan | DELETE, INSERT, UPDATE
+ app_write    | transaksi | DELETE, INSERT, UPDATE
+ skema_owner  | akun      | DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ skema_owner  | pelanggan | DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ skema_owner  | tenant    | DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+ skema_owner  | transaksi | DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+(11 rows)
+
+=== 5c. Kepemilikan: satu-satunya peran yang memegang DROP dan ALTER ===
+   tabel   |   pemilik   
+-----------+-------------
+ akun      | skema_owner
+ pelanggan | skema_owner
+ tenant    | skema_owner
+ transaksi | skema_owner
+(4 rows)
+
+=== 5d. Hak efektif yang benar-benar dirasakan peran login ===
+    peran     | pelanggan_select | pelanggan_update | pelanggan_delete | transaksi_select | akun_select 
+--------------+------------------+------------------+------------------+------------------+-------------
+ app_analitik | t                | f                | f                | f                | f
+ app_audit    | f                | f                | f                | f                | f
+ app_laporan  | t                | f                | f                | t                | t
+ app_portal   | t                | t                | t                | t                | t
+ app_read     | t                | f                | f                | t                | t
+ app_write    | t                | t                | t                | t                | t
+ skema_owner  | t                | t                | t                | t                | t
+(7 rows)
+
+########## q06_default_deny ##########
+=== 6a. Pastikan belum ada kebijakan apa pun pada pelanggan ===
+ jumlah_kebijakan 
+------------------
+                0
+(1 row)
+
+=== 6b. Nyalakan RLS ===
+ALTER TABLE
+  relname  | rls_menyala | rls_dipaksa 
+-----------+-------------+-------------
+ pelanggan | t           | f
+(1 row)
+
+=== 6c. Hak SELECT app_laporan: masih utuh ===
+ hak_select_masih_ada 
+----------------------
+ t
+(1 row)
+
+=== 6d. Baris yang DILIHAT app_laporan: nol ===
+BEGIN
+SET
+ peran_aktif 
+-------------
+ app_laporan
+(1 row)
+
+ sebelum_ada_kebijakan 
+-----------------------
+                     0
+(1 row)
+
+COMMIT
+=== 6e. Pembanding: baris yang sebenarnya ada di tabel ===
+ baris_sesungguhnya 
+--------------------
+              30000
+(1 row)
+
+########## q07_kebijakan_penyewa ##########
+=== 7a. Mengapa nullif: app.tenant yang pernah dipakai berisi  ===
+BEGIN
+SET
+ nilai_mentah | panjang 
+--------------+---------
+              |       0
+(1 row)
+
+psql:/lab11/q07_kebijakan_penyewa.sql:19: ERROR:  22P02: invalid input syntax for type integer: ""
+LOCATION:  pg_strtoint32_safe, numutils.c:616
+ROLLBACK
+BEGIN
+SET
+ cast_dengan_nullif 
+--------------------
+                   
+(1 row)
+
+ROLLBACK
+=== 7b. Sepasang kebijakan isolasi penyewa ===
+psql:/lab11/q07_kebijakan_penyewa.sql:34: NOTICE:  00000: policy "p_tenant_baca" for relation "lab11.pelanggan" does not exist, skipping
+LOCATION:  does_not_exist_skipping, dropcmds.c:523
+DROP POLICY
+psql:/lab11/q07_kebijakan_penyewa.sql:35: NOTICE:  00000: policy "p_tenant_tulis" for relation "lab11.pelanggan" does not exist, skipping
+LOCATION:  does_not_exist_skipping, dropcmds.c:523
+DROP POLICY
+CREATE POLICY
+CREATE POLICY
+=== 7c. Kebijakan yang terpasang ===
+   policyname   | permissive |        roles         |  cmd   |                                         qual                                         |                                      with_check                                      
+----------------+------------+----------------------+--------+--------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------
+ p_tenant_baca  | PERMISSIVE | {app_read,app_write} | SELECT | (tenant_id = (NULLIF(current_setting('app.tenant'::text, true), ''::text))::integer) | 
+ p_tenant_tulis | PERMISSIVE | {app_write}          | ALL    | (tenant_id = (NULLIF(current_setting('app.tenant'::text, true), ''::text))::integer) | (tenant_id = (NULLIF(current_setting('app.tenant'::text, true), ''::text))::integer)
+(2 rows)
+
+=== 7d. Kebijakan bersifat permissive: keduanya digabung dengan OR ===
+ jumlah_kebijakan | permissive | restrictive 
+------------------+------------+-------------
+                2 |          2 |           0
+(1 row)
+
+########## q08_uji_positif_negatif ##########
+===== UJI POSITIF =====
+=== 8a. app_laporan, penyewa 1 ===
+BEGIN
+SET
+SET
+    peran    | penyewa 
+-------------+---------
+ app_laporan | 1
+(1 row)
+
+ terlihat_tenant1 
+------------------
+            10000
+(1 row)
+
+ id_terkecil | id_terbesar 
+-------------+-------------
+           1 |       10000
+(1 row)
+
+ penyewa_yang_terlihat 
+-----------------------
+                     1
+(1 row)
+
+COMMIT
+=== 8b. app_laporan, penyewa 2: kebijakan yang sama, jendela berbeda ===
+BEGIN
+SET
+SET
+ terlihat_tenant2 
+------------------
+            10000
+(1 row)
+
+ id_terkecil | id_terbesar 
+-------------+-------------
+       10001 |       20000
+(1 row)
+
+COMMIT
+===== UJI NEGATIF: enam bentuk kegagalan =====
+=== 8c. (1) Penyewa 1 meminta baris penyewa 2 secara eksplisit ===
+BEGIN
+SET
+SET
+ harus_nol 
+-----------
+         0
+(1 row)
+
+COMMIT
+=== 8d. (2) Penyewa 1 menyebut id milik penyewa 2 ===
+BEGIN
+SET
+SET
+ harus_nol 
+-----------
+         0
+(1 row)
+
+ harus_nol_rentang 
+-------------------
+                 0
+(1 row)
+
+COMMIT
+=== 8e. (3) app.tenant tidak disetel pada transaksi ini ===
+BEGIN
+SET
+ nilai | apakah_null | terkutip 
+-------+-------------+----------
+       | f           | ''
+(1 row)
+
+ harus_nol 
+-----------
+         0
+(1 row)
+
+COMMIT
+=== 8f. (4) app.tenant berisi string kosong ===
+BEGIN
+SET
+SET
+ harus_nol 
+-----------
+         0
+(1 row)
+
+COMMIT
+=== 8g. (5) app.tenant menyebut penyewa yang tidak ada ===
+BEGIN
+SET
+SET
+ harus_nol 
+-----------
+         0
+(1 row)
+
+COMMIT
+=== 8h. (6) Jalur tulis: penyewa 1 mencoba menyentuh penyewa 2 ===
+BEGIN
+SET
+SET
+   peran    
+------------
+ app_portal
+(1 row)
+
+ baris_terdampak_update 
+------------------------
+                      0
+(1 row)
+
+ baris_terdampak_delete 
+------------------------
+                      0
+(1 row)
+
+psql:/lab11/q08_uji_positif_negatif.sql:101: ERROR:  42501: new row violates row-level security policy for table "pelanggan"
+LOCATION:  ExecWithCheckOptions, execMain.c:2199
+ROLLBACK
+=== 8i. Pastikan tidak ada data yang berubah ===
+ total_pelanggan 
+-----------------
+           30000
+(1 row)
+
+ kota_diubah 
+-------------
+           0
+(1 row)
+
+ tenant_id | count 
+-----------+-------
+         1 | 10000
+         2 | 10000
+         3 | 10000
+(3 rows)
+
+########## q09_force_dan_bypass ##########
+=== 9a. skema_owner SEBELUM force: pemilik tidak terkena kebijakan ===
+ rls_menyala | rls_dipaksa 
+-------------+-------------
+ t           | f
+(1 row)
+
+BEGIN
+SET
+SET
+    peran    | dilihat_owner_sebelum_force 
+-------------+-----------------------------
+ skema_owner |                       30000
+(1 row)
+
+COMMIT
+=== 9b. Nyalakan FORCE, lalu ukur lagi dengan query yang sama ===
+ALTER TABLE
+ rls_menyala | rls_dipaksa 
+-------------+-------------
+ t           | t
+(1 row)
+
+BEGIN
+SET
+SET
+    peran    | dilihat_owner_sesudah_force 
+-------------+-----------------------------
+ skema_owner |                           0
+(1 row)
+
+COMMIT
+=== 9c. app_analitik dengan pg_read_all_data ===
+GRANT ROLE
+ hak_select | anggota_read_all | bypass_rls 
+------------+------------------+------------
+ t          | t                | f
+(1 row)
+
+BEGIN
+SET
+SET
+    peran     | dilihat_dengan_read_all_data 
+--------------+------------------------------
+ app_analitik |                            0
+(1 row)
+
+COMMIT
+=== 9d. app_analitik dengan BYPASSRLS ===
+ALTER ROLE
+   rolname    | bypass_rls 
+--------------+------------
+ app_analitik | t
+(1 row)
+
+BEGIN
+SET
+SET
+    peran     | dilihat_dengan_bypassrls 
+--------------+--------------------------
+ app_analitik |                    30000
+(1 row)
+
+ penyewa_yang_terlihat 
+-----------------------
+                     3
+(1 row)
+
+COMMIT
+=== 9e. Cabut BYPASSRLS; pg_read_all_data DIBIARKAN untuk dicabut Q23 ===
+ALTER ROLE
+   rolname    | bypass_rls | masih_anggota_read_all 
+--------------+------------+------------------------
+ app_analitik | f          | t
+(1 row)
+
+=== 9f. Ringkasan empat keadaan, query tidak pernah berubah ===
+                            pelajaran_1                             |                              pelajaran_2                              
+--------------------------------------------------------------------+-----------------------------------------------------------------------
+ FORCE wajib, sebab pemilik tabel tidak terkena kebijakan tanpa itu | pg_read_all_data bukan BYPASSRLS; audit hak tidak cukup memeriksa ACL
+(1 row)
+
+########## q10_kolam_koneksi ##########
+===== BAGIAN 1: POLA YANG SALAH (SET tanpa LOCAL) =====
+=== 10a. Permintaan ke-1: pengguna penyewa 1, menyetel dengan SET ===
+BEGIN
+SET
+SET
+ penyewa | dilihat 
+---------+---------
+ 1       |   10000
+(1 row)
+
+COMMIT
+=== 10b. Permintaan ke-2: koneksi yang sama, TIDAK menyebut penyewa ===
+BEGIN
+SET
+ penyewa_yang_tertinggal | dilihat 
+-------------------------+---------
+ 1                       |   10000
+(1 row)
+
+COMMIT
+=== 10c. Mengapa ini berbahaya ===
+===== BAGIAN 2: POLA YANG BENAR =====
+=== 10d. Bersihkan sisa dari kolam ===
+RESET
+ sesudah_reset 
+---------------
+ ''
+(1 row)
+
+=== 10e. Permintaan ke-3: set_config(..., true) -- parameter is_local ===
+BEGIN
+SET
+ disetel_lokal 
+---------------
+ 1
+(1 row)
+
+ penyewa | dilihat 
+---------+---------
+ 1       |   10000
+(1 row)
+
+COMMIT
+=== 10f. Permintaan ke-4: koneksi yang sama, tidak ada sisa lagi ===
+BEGIN
+SET
+ penyewa_tersisa | dilihat 
+-----------------+---------
+ ''              |       0
+(1 row)
+
+COMMIT
+=== 10g. Pola yang dipakai rentan.py ===
+                             kaidah                              
+-----------------------------------------------------------------
+ SET LOCAL dan set_config(...,true) hanya hidup selama transaksi
+(1 row)
+
+########## q11_tiga_celah ##########
+================================================================
+CELAH 1: pemilik tabel tidak terkena kebijakan tanpa FORCE
+Perbaikan: nyalakan FORCE ROW LEVEL SECURITY pada setiap tabel
+berpenyewa, dan jadikan itu bagian dari migrasi.
+================================================================
+BEGIN
+SET
+SET
+ dengan_force 
+--------------
+            0
+(1 row)
+
+COMMIT
+ALTER TABLE
+BEGIN
+SET
+SET
+ tanpa_force 
+-------------
+       30000
+(1 row)
+
+ penyewa_terlihat 
+------------------
+                3
+(1 row)
+
+COMMIT
+ALTER TABLE
+================================================================
+CELAH 2: atribut peran BYPASSRLS tidak tercatat di ACL mana pun
+Perbaikan: audit rolbypassrls di pg_roles secara berkala, dan
+jangan pernah menyematkannya pada peran aplikasi.
+================================================================
+   rolname   | bypass_rls 
+-------------+------------
+ app_laporan | f
+(1 row)
+
+BEGIN
+SET
+SET
+ sebelum_bypass 
+----------------
+          10000
+(1 row)
+
+COMMIT
+ALTER ROLE
+BEGIN
+SET
+SET
+ sesudah_bypass 
+----------------
+          30000
+(1 row)
+
+COMMIT
+ALTER ROLE
+                                          acl_pelanggan_tidak_berubah                                           
+----------------------------------------------------------------------------------------------------------------
+ {skema_owner=arwdDxtm/skema_owner,app_read=r/skema_owner,app_write=awd/skema_owner,app_analitik=r/skema_owner}
+(1 row)
+
+================================================================
+CELAH 3: fungsi SECURITY DEFINER milik peran istimewa
+Perbaikan: tulis fungsi pembaca sebagai SECURITY INVOKER, atau
+bila SECURITY DEFINER memang perlu, pemiliknya harus
+peran biasa yang tunduk kebijakan -- bukan superuser.
+================================================================
+ pemilik_fungsi_nanti | pemilik_superuser 
+----------------------+-------------------
+ postgres             | t
+(1 row)
+
+CREATE FUNCTION
+GRANT
+BEGIN
+SET
+SET
+ lewat_query_biasa 
+-------------------
+             10000
+(1 row)
+
+ lewat_fungsi_definer 
+----------------------
+                30000
+(1 row)
+
+COMMIT
+DROP FUNCTION
+=== 11d. Keadaan akhir: ketiga celah tertutup kembali ===
+ rls_menyala | rls_dipaksa | jumlah_kebijakan | peran_app_dengan_bypassrls | fungsi_security_definer 
+-------------+-------------+------------------+----------------------------+-------------------------
+ t           | t           |                2 |                          0 |                       0
+(1 row)
+
+########## SELESAI ##########

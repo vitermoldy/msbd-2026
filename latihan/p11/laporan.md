@@ -8,7 +8,7 @@ penyamaran, audit, dan UU PDP, seluruhnya pada skema `lab11`.
 | Nama | NIM | Kontribusi | Commit |
 |---|---|---|---|
 | Viter | 251402079 | Langkah 1 (setup, dua kontainer, `q00_setup.sql`, `rentan.py`, `README.md`), Langkah 2 (Q1–Q5, Reflektif A), Langkah 3 (Q6–Q11, Reflektif B) | `2d81d1e` … `90f5472` (19 commit) pada cabang `latihan/p11-keamanan` |
-| «nama» | «NIM» | Langkah 4 (Q12–Q18, Reflektif C) | |
+| Finsus | 251402038 | Langkah 4 (Q12–Q18, Reflektif C) | `d472673` … `2d2155d` (2 commit) pada cabang `latihan/p11-keamanan` |
 | «nama» | «NIM» | Langkah 5 (Q19–Q24, Reflektif D) | |
 | «nama» | «NIM» | Langkah 6 (Q25–Q30, Reflektif E) | |
 | «nama» | «NIM» | Langkah 7 (R1: tiga disiplin keamanan, perakitan laporan) | |
@@ -599,14 +599,176 @@ bagian Kondisi Uji. Perlu dicatat juga bahwa payload dengan `--` mengembalikan 3
 RLS belum menyala dan 10000 bila sudah; jalankan Langkah 3 lebih dulu agar angka Q14 bermakna.»
 
 ## Q12
+Berkas: `q12_perilaku_normal.sql`, `rentan.py`.
+
+```text
+$ python rentan.py "Pelanggan 12"
+[SQL TERCETAK] SELECT id, nama, kota FROM lab11.pelanggan WHERE tenant_id = 1 AND nama ILIKE '%Pelanggan 12%'
+[JUMLAH BARIS] 365
+```
+Bagian yang berasal dari masukan pengguna adalah string Pelanggan 12 yang disisipkan langsung
+ke dalam pola pencarian '%Pelanggan 12%' melalui interpolasi string Python (f"... '%{kata}%'").
+Pada kondisi normal, masukan pengguna hanya berisi karakter alfanumerik biasa sehingga struktur
+klausa WHERE tetap sesuai rancangan pemrogram dan mengembalikan 365 baris milik penyewa 1.
 ## Q13
+Berkas: `q13_sebab_bukan_kutip.sql`.
+
+| Payload masukan (`kata`) | Kalimat SQL yang dieksekusi PostgreSQL | Jumlah baris |
+|---|---|---:|
+| `zz' OR '1'='1` | `... WHERE tenant_id = 1 AND nama ILIKE '%zz' OR '1'='1%'` | **0** |
+| `zz' OR '1'='1' --` | `... WHERE tenant_id = 1 AND nama ILIKE '%zz' OR '1'='1' --%'` | **30000** |
+
+**Mengapa yang pertama menghasilkan 0 baris.** Tanpa komentar penutup, tanda kutip tunggal dan
+tanda persen bawaan kode (%') menempel langsung di ujung payload. Akibatnya, predikat kedua
+terbaca sebagai '1'='1%' — membandingkan string '1' dengan string dua karakter '1%' —
+yang bernilai FALSE. Karena nama ILIKE '%zz' juga FALSE, seluruh klausa WHERE bernilai
+salah dan mengembalikan nol baris.
+
+**Mengapa yang kedua membocorkan seluruh 30.000 baris.** Penambahan -- mengubah sisa kutip
+dan persen bawaan kode (%') menjadi komentar yang diabaikan parser, sehingga perbandingan
+'1'='1' menjadi valid dan bernilai TRUE. Selanjutnya, karena operator AND di PostgreSQL
+memiliki prioritas (operator precedence) lebih tinggi daripada OR, basis data mengevaluasi
+kalimat tersebut sebagai:
+
+```sql
+WHERE (tenant_id = 1 AND nama ILIKE '%zz') OR ('1'='1')
+```
+Karena koneksi awal rentan.py berjalan melewati RLS dan cabang kanan OR selalu TRUE,
+seluruh 30.000 baris dari ketiga penyewa ikut terbaca. Inti pelajarannya bukan pada
+karakter kutipnya — melainkan fakta bahwa masukan pengguna ikut menyusun tata bahasa SQL,
+sehingga data berubah menjadi instruksi logika.
 ## Q14
+Berkas: `q14_batas_hak.sql`.
+
+| Yang diamati | Koneksi awal (melewati RLS) | Koneksi `app_laporan` (`app_read` + RLS) | Status |
+|---|---:|---:|---|
+| Baris terbaca dari payload Q13 | **30000** (3 penyewa) | **10000** (hanya penyewa 1) | **Berubah** |
+| Baris penyewa 2 dan 3 yang bocor | **20000** | **0** | **Berubah** |
+| Percobaan `UPDATE` lewat celah yang sama | Dapat berjalan | **ERROR `42501`** (*permission denied*) | **Berubah** |
+| Keberhasilan injeksi di dalam penyewa 1 | Berhasil | **Tetap berhasil** (seluruh 10000 baris terbaca) | **Tetap** |
+
+```text
+ERROR:  42501: permission denied for table pelanggan
+```
+**Kaitan dengan prinsip hak minimum per tabel**. Menerapkan peran app_laporan dengan hak
+baca saja (app_read) dan mengikatnya ke kebijakan RLS mempersempit radius ledakan (blast
+radius) secara drastis: kebocoran lintas penyewa turun dari 30.000 menjadi nol baris, dan
+jalur modifikasi data tertutup rapat dengan SQLSTATE 42501.
+
+Namun tabel di atas juga menunjukkan batas dari kontrol akses: yang tetap adalah kerentanan
+injeksinya sendiri. RLS dan hak tabel bekerja setelah kalimat SQL diparsing; keduanya tidak
+menghentikan masukan pengguna memanipulasi predikat WHERE, sehingga penyerang tetap bisa
+menyedot seluruh 10.000 baris milik penyewa 1 sekaligus.
 ## Q15
+Berkas: `q15_perbaikan.sql`.
+
+| Pengujian pada `cari_aman` | Perlakuan PostgreSQL | Hasil |
+|---|---|---|
+| Payload `zz' OR '1'='1' --` | Dikirim lewat saluran parameter (`$1`), diperlakukan sebagai teks literal | **0 baris**, tanpa galat sintaks |
+| Masukan sah berisi kutip, misal `O'Connor` | Dikirim lewat saluran parameter (`$1`), tanda kutip tetap utuh | Berjalan normal sebagai pencarian teks |
+| Penyaringan karakter (*blacklist* `replace("'", "")`) | Mengubah masukan sebelum digabung ke string SQL | **Rapuh**: gagal di konteks angka/pengenal dan merusak data sah |
+
+Ketika payload Q13 dikirim lewat cari_aman, PostgreSQL memisahkan fase penyusunan pohon sintaks
+(Parse) dengan fase pengikatan nilai (Bind) melalui protokol biner/parameter yang terpisah.
+Seluruh string %zz' OR '1'='1' --% dikirim lewat saluran data dan diperlakukan murni sebagai
+nilai literal untuk dicocokkan oleh ILIKE, tidak pernah sebagai token sintaks SQL.
+
+**Mengapa penyaringan karakter tidak akan mencapai hasil yang sama.** Pendekatan blacklist
+atau penghapusan karakter (misalnya kata.replace("'", "")) gagal menutup akar masalah karena
+tiga alasan:
+
+Tidak berlaku di luar konteks string: injeksi pada kolom angka (WHERE id = <input>)
+atau pengenal (ORDER BY <input>) tidak memerlukan tanda kutip tunggal sama sekali.
+
+Merusak data yang sah: menghapus atau mengubah tanda kutip merusak nama asli pengguna
+seperti O'Connor atau Ma'ruf.
+
+Tetap mencampurkan kode dan data: satu variasi encoding atau celah pada fungsi sanitasi
+langsung mengembalikan kemampuan masukan mengubah struktur SQL.
 ## Q16
+Berkas: `q16_pengenal_daftar_putih.sql`.
+
+Tidak semua bagian kalimat SQL dapat diparameterkan. Nama kolom pada ORDER BY dan kata kunci
+arah pengurutan (ASC/DESC) tidak bisa memakai %s atau $1, karena bind parameter di
+PostgreSQL hanya mewakili nilai literal data — bukan pengenal (identifier) atau kata kunci
+sintaks.
+| Masukan `(kolom, arah)` | Status pada daftar putih | Hasil eksekusi |
+|---|---|---|
+| `('nama', 'naik')` | Terdaftar (`nama` → `nama`, `naik` → `ASC`) | Berhasil mengembalikan 5 baris terurut menaik |
+| `('kota', 'turun')` | Terdaftar (`kota` → `kota`, `turun` → `DESC`) | Berhasil mengembalikan 5 baris terurut menurun |
+| `('nama; SELECT 1--', 'naik')` | Tidak terdaftar | Ditolak sebelum eksekusi (`ValueError` / **`ERROR 22023`**) |
+| `('nama', 'ASC; DROP TABLE--')` | Tidak terdaftar | Ditolak sebelum eksekusi (`ValueError` / **`ERROR 22023`**) |
+
+```text
+ERROR:  22023: parameter pengurutan tidak dikenal: kolom=nama; SELECT 1--, arah=naik
+```
+Dengan memetakan kunci masukan ke nilai konstan di dalam kamus tertutup (KOLOM dan ARAH),
+string yang dirangkai ke dalam query berasal 100% dari konstanta milik aplikasi sendiri, bukan
+dari input pengguna.
 ## Q17
+Berkas: `q17_second_order.sql`.
+
+Satu baris uji dengan nilai kota berisi payload Medan' UNION SELECT surel, 1 FROM lab11.pelanggan WHERE id <= 3 --
+disimpan ke dalam lab11.pelanggan melalui jalur INSERT berparameter yang aman, lalu
+dibaca kembali oleh dua fungsi laporan:
+| Fungsi yang dipanggil | Cara menyusun query di dalam fungsi | Hasil eksekusi |
+|---|---|---|
+| `lab11.laporan_kota_rentan` | Penggabungan string (`'... WHERE kota = ''' \|\| p_kota \|\| ''''`) | **3 baris surel pelanggan bocor** (`UNION SELECT` tereksekusi) |
+| `lab11.laporan_kota_aman` | Eksekusi berparameter (`EXECUTE '... WHERE kota = $1' USING p_kota`) | **1 baris literal** (payload diperlakukan sebagai nama kota biasa) |
+
+**Mengapa pertahanan di pintu masuk tidak menolong.** Pada saat INSERT, query berparameter berhasil mencegah injeksi dan menyimpan string payload tersebut secara utuh ke kolom kota. Namun, pertahanan di pintu masuk hanya mengamankan langkah penulisan pertama. Begitu tersimpan di tabel, data itu sering kali diasumsikan bersih oleh prosedur internal lain. Ketika laporan_kota_rentan membaca nilai kolom kota dan menggabungkannya ulang menjadi teks SQL tanpa USING atau format('%L'), muatan berbahaya yang semula pasif berubah menjadi perintah SQL aktif pada eksekusi tahap kedua (second-order injection). Setiap batas query dinamis — termasuk di dalam fungsi PL/pgSQL — wajib memparameterkan nilainya sendiri.
+
 ## Q18
+Berkas: `q18_batas_waktu.sql`.
+
+```sql
+ALTER ROLE app_portal SET statement_timeout = '5s';
+```
+
+| Perintah / Skenario uji | Konfigurasi `statement_timeout` pada `app_portal` | Hasil eksekusi | SQLSTATE & Jejak Log |
+|---|---|---|---:|
+| Kueri normal (`SELECT ... LIMIT 100`) | `5s` | Selesai dalam hitungan milidetik | Normal (tidak tercatat galat) |
+| Percobaan penundaan (`SELECT pg_sleep(6)`) | Tanpa batas (`0` / bawaan) | Selesai setelah 6 detik tanpa galat | Senyap (tidak ada galat di log) |
+| Percobaan penundaan (`SELECT pg_sleep(6)`) | `5s` (`ALTER ROLE app_portal SET statement_timeout = '5s'`) | Dibatalkan paksa tepat pada detik ke-5 | **`57014`** (`ERROR: canceling statement due to statement timeout`) |
+
+```text
+ERROR:  57014: canceling statement due to statement timeout
+```
+**Bagaimana batas waktu membuat percobaan berbasis pg_sleep menjadi berisik di log.** Pada serangan time-based blind SQL injection, penyerang menyisipkan fungsi penunda seperti pg_sleep(10) di balik percabangan kondisional untuk menyimpulkan isi basis data dari jeda waktu respons HTTP — tanpa memunculkan pesan galat di layar aplikasi. Ketika statement_timeout dipasang pada peran aplikasi (5s), setiap kueri yang melampaui ambang waktu tersebut langsung diputus oleh PostgreSQL dan dicatat ke log server sebagai ERROR: 57014. Lonjakan entri 57014 di log mengubah serangan yang semula senyap dan tak terlihat menjadi sangat berisik dan mudah dideteksi oleh sistem pemantauan (monitoring/IDS), sekaligus mencegah habisnya connection pool akibat kueri yang menggantung.
+
 
 ## 📝 Reflektif C
+
+**Satu-satunya lapis yang menghapus sebab masalah adalah Query Berparameter dan Daftar Putih
+Tertutup (Q15–Q16).** Akar penyebab SQL injection adalah bercampurnya data masukan pengguna ke
+dalam struktur tata bahasa SQL sebelum diparsing. Query berparameter memisahkan saluran data
+(*Bind*) dari struktur perintah (*Parse*) pada level protokol basis data, sedangkan daftar
+putih tertutup memastikan pengenal sintaks hanya berasal dari konstanta aplikasi. Dengan
+keduanya, masukan pengguna tidak pernah memiliki kesempatan untuk ditafsirkan sebagai kode[cite: 15, 16].
+
+Tiga lapis lainnya tidak menghapus kerentanan injeksi di dalam kode, melainkan bekerja sebagai
+**pengaman kedalaman (*defense-in-depth*)** yang membatasi dampak dan mempercepat deteksi[cite: 15, 16]:
+
+| Lapis Pertahanan | Menghapus Akar Masalah? | Peran Utama & Bukti Eksperimen |
+|---|:---:|---|
+| **Query Berparameter & Daftar Putih (Q15–Q16)** | **Ya** | Memisahkan data dari kode SQL sehingga injeksi gagal dieksekusi |
+| **Hak Minimum & RLS (Q14)** | Tidak | Membatasi *blast radius* kebocoran dari **30.000** menjadi **10.000 baris** (hanya penyewa 1) dan memblokir tulis (`42501`) |
+| **Batas Waktu / `statement_timeout` (Q18)** | Tidak | Memutus serangan penundaan (`pg_sleep`) pada detik ke-5 (**`SQLSTATE 57014`**) dan memunculkan jejak berisik di log |
+| **Penyaringan Input / Pintu Masuk (Q13 & Q17)** | Tidak | Rapuh terhadap perubahan konteks sintaks dan gagal menahan *second-order injection* saat data dibaca ulang dari tabel[cite: 15, 16] |
+
+1. **Prinsip Hak Minimum dan Row-Level Security (bukti dari Q14):** Tidak mencegah kalimat
+   injeksi dieksekusi di dalam satu penyewa, tetapi membatasi *blast radius* kerusakan. Pada Q14,
+   peran `app_laporan` yang tunduk pada RLS menahan kebocoran dari **30.000 baris** lintas
+   penyewa menjadi **10.000 baris** milik penyewa 1 saja, sekaligus menolak seluruh upaya tulis
+   dengan **`SQLSTATE 42501`**[cite: 15].
+2. **Batas Waktu Eksekusi / `statement_timeout` (bukti dari Q18):** Tidak mencegah kueri injeksi
+   yang selesai di bawah 5 detik, tetapi menggagalkan eksploitasi penundaan waktu (`pg_sleep`)
+   dan kelelahan koneksi dengan memutus kueri pada detik ke-5 melalui **`SQLSTATE 57014`**,
+   sehingga serangan senyap berubah menjadi berisik di log server[cite: 16].
+3. **Pertahanan di Pintu Masuk / Validasi Awal (bukti dari Q13 dan Q17):** Hanya menyaring
+   masukan pada titik masuk pertama (`INSERT`), tetapi terbukti tidak berdaya ketika struktur
+   sintaks berubah atau ketika prosedur hilir di dalam basis data masih merangkai string SQL
+   secara dinamis dari kolom tabel (*second-order injection*)[cite: 15, 16].
 
 ---
 

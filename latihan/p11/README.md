@@ -172,6 +172,21 @@ q00_setup
 → Langkah 7  q30 + laporan.md             (peta UU PDP dan laporan terpadu)
 ```
 
+### Catatan menjalankan Langkah 5 (Q19–Q24)
+
+- Jalankan Q19–Q21 sebagai `postgres` pada basis data `msbd`; Q21 harus dijalankan utuh
+  dalam satu session karena kunci `app.kunci_kolom` disetel pada session tersebut.
+- Untuk Q22, buka session kedua ketika `UPDATE` enkripsi pada Q21 sedang berlangsung,
+  lalu jalankan `q22_kunci_bocor.sql` dari session kedua. Jika proses Q21 sudah selesai,
+  ulangi pengamatan pada eksekusi berikutnya; jangan mengarang keluaran `pg_stat_activity`.
+- Jalankan Q23 sebagai `postgres`/superuser lab. Skrip mencabut `pg_read_all_data` yang
+  diberikan Q9, membuat view tanpa `security_invoker`, lalu menguji akses view dan penolakan
+  akses tabel langsung untuk `app_analitik`.
+- Jalankan Q24 setelah Q23. Catat angka aktual dari query; jumlah kombinasi dan persentase
+  harus berasal dari data pada database, bukan perkiraan.
+- Kunci contoh di Q21 hanya untuk kontainer praktikum. Jangan gunakan atau commit kunci
+  produksi ke repositori.
+
 Tiga ketergantungan yang mudah terlewat:
 
 1. **Q6 wajib dijalankan sebelum satu pun kebijakan dibuat.** Begitu Q7 membuat kebijakan,

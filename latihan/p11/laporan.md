@@ -9,7 +9,7 @@ penyamaran, audit, dan UU PDP, seluruhnya pada skema `lab11`.
 |---|---|---|---|
 | Viter | 251402079 | Langkah 1 (setup, dua kontainer, `q00_setup.sql`, `rentan.py`, `README.md`), Langkah 2 (Q1–Q5, Reflektif A), Langkah 3 (Q6–Q11, Reflektif B) | `2d81d1e` … `90f5472` (19 commit) pada cabang `latihan/p11-keamanan` |
 | Finsus | 251402038 | Langkah 4 (Q12–Q18, Reflektif C) | `d472673` … `2d2155d` (2 commit) pada cabang `latihan/p11-keamanan` |
-| «nama» | «NIM» | Langkah 5 (Q19–Q24, Reflektif D) | |
+| Nadine | 251402050 | Langkah 5 (Q19–Q24, Reflektif D) | |
 | «nama» | «NIM» | Langkah 6 (Q25–Q30, Reflektif E) | |
 | «nama» | «NIM» | Langkah 7 (R1: tiga disiplin keamanan, perakitan laporan) | |
 
@@ -774,18 +774,142 @@ Tiga lapis lainnya tidak menghapus kerentanan injeksi di dalam kode, melainkan b
 
 # Langkah 5 · Q19–Q24: Enkripsi, Hashing, dan Penyamaran
 
-«Diisi pemegang Langkah 5. `pgcrypto` sudah terpasang `q00_setup.sql`. Dua catatan: Q23 harus
-mencabut `pg_read_all_data` yang diberikan Q9 (sengaja dibiarkan menempel), dan lihat peringatan
-pada Q11 celah 3 soal pemilik tampilan tersamar.»
+Ekstensi `pgcrypto` sudah dipasang oleh `q00_setup.sql`. Seluruh skrip Q19–Q24 berada di
+folder yang sama dan dijalankan berurutan setelah Q18. Bagian ini memisahkan hashing kata
+sandi, pengukuran biaya komputasi, enkripsi kolom, pemeriksaan kebocoran, pembatasan akses
+melalui view, dan pengurangan risiko identifikasi ulang.
 
-## Q19
-## Q20
-## Q21
-## Q22
-## Q23
-## Q24
+## Q19 — Hash kata sandi dengan bcrypt
+
+Berkas: `q19_hash_vs_enkripsi.sql`.
+
+Kolom `lab11.akun.kata_sandi` diisi dengan hasil `crypt('Lab11-Sandi-Uji!', gen_salt('bf', 8))`.
+Dua pemanggilan `crypt` untuk plaintext yang sama menghasilkan hash berbeda karena setiap
+pemanggilan `gen_salt` membuat salt acak. Pemeriksaan kata sandi dilakukan dengan menghitung
+`crypt(plaintext, hash_tersimpan) = hash_tersimpan`; hasil `true` menandakan kata sandi cocok.
+
+Bcrypt mencegah penggunaan langsung tabel hash prahitung/rainbow table dan menaikkan biaya
+serangan tebakan kata sandi secara offline. Salt yang berbeda juga membuat dua akun dengan
+kata sandi sama tidak memiliki hash yang sama. Kata sandi pada skrip hanya data uji praktikum,
+bukan kredensial produksi.
+
+**Bukti eksekusi:** tempelkan keluaran dua hash dan hasil kolom `kata_sandi_cocok` dari empat
+akun setelah skrip dijalankan. Jangan menyalin kata sandi asli ke laporan produksi.
+
+## Q20 — Pengukuran biaya kerja bcrypt dan MD5
+
+Berkas: `q20_biaya_kerja.sql`.
+
+Skrip mengulang operasi hashing 1.000 kali untuk bcrypt cost 6, bcrypt cost 10, dan MD5,
+lalu mencatat durasi dengan `clock_timestamp()`. Pengukuran bcrypt menggunakan `crypt`, bukan
+hanya `gen_salt`, sehingga yang diukur adalah operasi hash kata sandi secara utuh.
+
+Cost 10 diperkirakan lebih lambat daripada cost 6 karena bcrypt meningkatkan jumlah kerja
+komputasi secara eksponensial terhadap parameter cost. MD5 jauh lebih cepat, tetapi justru
+karena itu tidak sesuai untuk penyimpanan kata sandi: penyerang dapat mencoba tebakan jauh
+lebih banyak per satuan waktu.
+
+**Bukti eksekusi:** masukkan tiga durasi `NOTICE` dari PostgreSQL. Durasi aktual bergantung
+pada CPU, beban mesin, dan versi lingkungan; angka tidak boleh diisi dengan perkiraan.
+
+## Q21 — Enkripsi kolom rekening
+
+Berkas: `q21_enkripsi_kolom.sql`.
+
+Skrip menetapkan `app.kunci_kolom` pada session, menambahkan kolom `rekening_enc BYTEA` bila
+belum ada, lalu mengenkripsi rekening untuk baris dengan `id <= 1000` menggunakan
+`pgp_sym_encrypt`. Satu baris didekripsi kembali dengan `pgp_sym_decrypt` dan kunci session
+yang sama. Pemeriksaan terakhir mengenkripsi plaintext dan kunci yang sama dua kali.
+
+Hasil perbandingan ciphertext diharapkan `false`: format PGP menggunakan komponen acak,
+sehingga ciphertext tidak harus identik walaupun plaintext dan kuncinya sama. Kolom rekening
+asli masih dipertahankan dalam latihan agar hasil dekripsi dapat dibandingkan; dalam sistem
+nyata, akses ke kolom plaintext harus dibatasi atau kolom asli dihapus setelah proses migrasi
+terverifikasi.
+
+**Bukti eksekusi:** lampirkan satu baris hasil dekripsi dan keluaran `ciphertext_sama`. Kunci
+yang tertulis di skrip hanya kunci demonstrasi untuk kontainer tertutup; jangan dipakai di
+lingkungan nyata dan jangan commit kunci produksi ke Git.
+
+## Q22 — Pemeriksaan kebocoran kunci dan teks terang
+
+Berkas: `q22_kunci_bocor.sql`.
+
+Query `pg_stat_activity` dijalankan dari session kedua ketika proses enkripsi Q21 sedang
+berjalan. Tampilan tersebut memperlihatkan teks query aktif, bukan otomatis isi nilai yang
+tersimpan di kolom atau hasil dekripsi. Jika kunci ditulis sebagai literal dalam teks query
+aktif, atau teks terang disisipkan langsung ke query, keduanya dapat terlihat oleh pihak yang
+berhak membaca statistik aktivitas. Jika kunci hanya disetel melalui perintah `SET` yang sudah
+selesai, perintah itu biasanya tidak lagi menjadi query aktif; karena itu pengamatan harus
+dilakukan ketika perintah terkait masih berjalan dan sesuai hak statistik pemeriksa.
+
+Dua lokasi lain yang wajib diperiksa adalah (1) log PostgreSQL, khususnya konfigurasi pencatatan
+statement, dan (2) log/debug aplikasi atau sistem tracing yang mungkin merekam parameter query,
+exception, maupun data sebelum dienkripsi.
+
+**Bukti eksekusi:** lampirkan hasil `pg_stat_activity` dari session kedua saat Q21 berlangsung.
+Jelaskan secara faktual apakah teks query yang terlihat memuat literal kunci atau teks terang;
+jangan menyimpulkan hal itu tanpa tangkapan layar/keluaran aktual.
+
+## Q23 — View tersamar untuk app_analitik
+
+Berkas: `q23_penyamaran.sql`.
+
+Skrip terlebih dahulu mencabut keanggotaan `pg_read_all_data` yang diberikan pada Q9, memastikan
+`app_analitik` tidak memiliki atribut `BYPASSRLS`, dan mencabut hak langsung atas
+`lab11.pelanggan`. Setelah itu dibuat `lab11.v_pelanggan_samar` dengan
+`security_invoker = false`, lalu hanya hak `SELECT` pada view yang diberikan kepada
+`app_analitik`. View menyamarkan nama, NIK, surel, tahun lahir, dan saldo.
+
+Perintah pembuatan view harus dijalankan sebagai `postgres` pada kontainer praktikum. Ini
+penting karena Q9 telah menyalakan `FORCE ROW LEVEL SECURITY`; view yang dimiliki
+`skema_owner` akan tunduk pada RLS dan tanpa kebijakan untuk pemilik dapat menghasilkan nol
+baris. View milik `postgres` pada laboratorium ini dapat membaca tabel, sementara analis hanya
+mendapat akses ke kolom hasil penyamaran. Ini adalah keputusan khusus demonstrasi, bukan pola
+produksi yang boleh disalin tanpa pengamanan: pemilik view berprivilege tinggi harus dikontrol
+ketat dan definisi view harus diaudit.
+
+**Bukti eksekusi:** SELECT ke `v_pelanggan_samar` sebagai `app_analitik` harus berhasil;
+SELECT langsung ke `lab11.pelanggan` harus ditolak dengan `SQLSTATE 42501`.
+
+## Q24 — Pengurangan identifikasi ulang
+
+Berkas: `q24_identifikasi_ulang.sql`.
+
+Query pertama menghitung banyaknya kombinasi unik `(kota, lahir)`, lalu membandingkannya
+dengan kombinasi `(kota, tahun_lahir)` setelah tanggal lahir digeneralisasi menggunakan
+`date_trunc('year', lahir)`. Persentase penurunan dihitung dengan rumus
+`(sebelum - sesudah) / sebelum * 100`. Query kedua mencari pasangan kota dan tanggal lahir
+yang hanya muncul sekali (`HAVING count(*) = 1`); pasangan tunggal seperti ini berpotensi
+membantu identifikasi seseorang bila digabungkan dengan informasi eksternal.
+
+Generalisasi mengurangi ketelitian data dan biasanya menurunkan jumlah kombinasi unik, tetapi
+tidak menjamin anonimitas. Data masih dapat dikenali melalui kombinasi atribut lain atau
+informasi eksternal.
+
+**Bukti eksekusi:** isi jumlah kombinasi sebelum, sesudah, persentase penurunan, dan contoh
+hasil query agregat dari keluaran aktual. Nilai numerik belum dicantumkan karena skrip belum
+dijalankan pada kontainer kelompok.
 
 ## 📝 Reflektif D
+
+Pernyataan bahwa seluruh kolom sensitif telah dienkripsi belum cukup untuk menyebut basis data
+aman. Pertama, **kebocoran kunci atau plaintext** tetap mungkin terjadi di luar penyimpanan,
+misalnya melalui teks query aktif pada `pg_stat_activity`, log PostgreSQL, atau log aplikasi;
+Q21 menunjukkan kunci dipakai pada session dan Q22 memeriksa permukaan kebocoran tersebut.
+Kedua, **identifikasi ulang** masih mungkin terjadi dari atribut yang tidak dienkripsi atau
+atribut yang telah disamarkan tetapi tetap cukup rinci; Q24 menguji keunikan pasangan kota dan
+tanggal lahir serta dampak generalisasi tanggal menjadi tahun.
+
+Satu risiko operasional enkripsi kolom adalah **ketergantungan pada pengelolaan dan ketersediaan
+kunci**. Jika kunci hilang, berubah, atau tidak tersedia pada session yang melakukan dekripsi,
+data ciphertext tidak dapat dipulihkan oleh aplikasi. Q21 memperlihatkan bahwa dekripsi
+memerlukan kunci yang sama dengan saat enkripsi. Karena itu kunci perlu disimpan dan dicadangkan
+secara terpisah, dibatasi aksesnya, dirotasi dengan prosedur migrasi, dan tidak dicatat ke log.
+
+**Bukti yang perlu dilengkapi setelah pengujian:** keluaran Q21 (dekripsi dan ciphertext
+berbeda), Q22 (`pg_stat_activity`), serta angka Q24. Bagian ini tidak mengklaim pengujian telah
+berhasil sebelum bukti tersebut benar-benar diambil.
 
 ---
 

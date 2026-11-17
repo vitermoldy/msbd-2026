@@ -9,7 +9,7 @@ penyamaran, audit, dan UU PDP, seluruhnya pada skema `lab11`.
 |---|---|---|---|
 | Viter | 251402079 | Langkah 1 (setup, dua kontainer, `q00_setup.sql`, `rentan.py`, `README.md`), Langkah 2 (Q1–Q5, Reflektif A), Langkah 3 (Q6–Q11, Reflektif B) | `2d81d1e` … `90f5472` (19 commit) pada cabang `latihan/p11-keamanan` |
 | Finsus | 251402038 | Langkah 4 (Q12–Q18, Reflektif C) | `d472673` … `2d2155d` (2 commit) pada cabang `latihan/p11-keamanan` |
-| Nadine | 251402050 | Langkah 5 (Q19–Q24, Reflektif D) | |
+| Nadine | 251402050 | Langkah 5 (Q19–Q24, Reflektif D) | `c5c12e3` … `14adf63` (2 commit) pada cabang `latihan/p11-keamanan` |
 | «nama» | «NIM» | Langkah 6 (Q25–Q30, Reflektif E) | |
 | «nama» | «NIM» | Langkah 7 (R1: tiga disiplin keamanan, perakitan laporan) | |
 
